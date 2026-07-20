@@ -6,6 +6,7 @@ WORKDIR /app
 
 COPY package*.json ./
 COPY backend/package*.json ./backend/
+COPY backend/scripts/patchHonkerApi.js ./backend/scripts/patchHonkerApi.js
 COPY frontend/package*.json ./frontend/
 RUN npm ci --workspace frontend --include-workspace-root=false
 
@@ -47,8 +48,10 @@ RUN chmod a+rx /usr/local/bin/yt-dlp && yt-dlp --version
 
 COPY package*.json ./
 COPY backend/package*.json ./backend/
+COPY backend/scripts/patchHonkerApi.js ./backend/scripts/patchHonkerApi.js
 COPY frontend/package*.json ./frontend/
 RUN npm ci --workspace backend --omit=dev --include=optional --include-workspace-root=false && \
+    node backend/scripts/patchHonkerApi.js && \
     node -e "require('sharp')" && \
     node --input-type=module -e "import honker from '@russellthehippo/honker-node'; honker.open('/tmp/honker-smoke.db'); console.log('honker ok')"
 
