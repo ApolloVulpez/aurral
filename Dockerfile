@@ -8,7 +8,8 @@ COPY package*.json ./
 COPY backend/package*.json ./backend/
 COPY backend/scripts/patchHonkerApi.js ./backend/scripts/patchHonkerApi.js
 COPY frontend/package*.json ./frontend/
-RUN npm ci --workspace frontend --include-workspace-root=false
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    npm ci --workspace frontend --include-workspace-root=false
 
 COPY frontend/ ./frontend/
 COPY lib/ ./lib/
@@ -20,9 +21,27 @@ ENV VITE_GITHUB_REPO=$GITHUB_REPO
 ENV VITE_RELEASE_CHANNEL=$RELEASE_CHANNEL
 RUN npm run build --workspace frontend
 
-FROM node-base
-ARG APP_VERSION=unknown
-ENV APP_VERSION=$APP_VERSION
+FROM node-base AS backend-deps
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY package*.json ./
+COPY backend/package*.json ./backend/
+COPY backend/scripts/patchHonkerApi.js ./backend/scripts/patchHonkerApi.js
+COPY frontend/package*.json ./frontend/
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    npm ci --workspace backend --omit=dev --include=optional --include-workspace-root=false && \
+    node backend/scripts/patchHonkerApi.js && \
+    node -e "require('sharp')" && \
+    node --input-type=module -e "import honker from '@russellthehippo/honker-node'; honker.open('/tmp/honker-smoke.db'); console.log('honker ok')"
+
+FROM node-base AS runtime
 
 WORKDIR /app
 
@@ -31,37 +50,31 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fontconfig \
     fonts-dejavu-core \
     python3 \
-    make \
-    g++ \
     ffmpeg \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 1001 nodejs \
     && useradd --uid 1001 --gid nodejs --shell /usr/sbin/nologin --create-home nodejs \
     && mkdir -p /app/backend/data /config \
-    && chown -R nodejs:nodejs /app
+    && chown -R nodejs:nodejs /app/backend/data /config
 
-ADD --checksum=sha256:e5d57466682cfa9d61e9cf7c8a4f09b00f4a62af37d3bbdc4bcffdf63615feac \
+ADD --chmod=755 --checksum=sha256:e5d57466682cfa9d61e9cf7c8a4f09b00f4a62af37d3bbdc4bcffdf63615feac \
     https://github.com/yt-dlp/yt-dlp/releases/download/2026.06.09/yt-dlp \
     /usr/local/bin/yt-dlp
-RUN chmod a+rx /usr/local/bin/yt-dlp && yt-dlp --version
+RUN yt-dlp --version
 
 COPY package*.json ./
 COPY backend/package*.json ./backend/
-COPY backend/scripts/patchHonkerApi.js ./backend/scripts/patchHonkerApi.js
 COPY frontend/package*.json ./frontend/
-RUN npm ci --workspace backend --omit=dev --include=optional --include-workspace-root=false && \
-    node backend/scripts/patchHonkerApi.js && \
-    node -e "require('sharp')" && \
-    node --input-type=module -e "import honker from '@russellthehippo/honker-node'; honker.open('/tmp/honker-smoke.db'); console.log('honker ok')"
+COPY --from=backend-deps /app/node_modules ./node_modules
 
 COPY backend/ ./backend/
 COPY lib/ ./lib/
 COPY --from=builder /app/frontend/dist ./frontend/dist
-COPY backend/docker-entrypoint.sh /usr/local/bin/
+COPY --chmod=755 backend/docker-entrypoint.sh /usr/local/bin/
 
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh && \
-    chown -R nodejs:nodejs /app
+ARG APP_VERSION=unknown
+ENV APP_VERSION=$APP_VERSION
 
 EXPOSE 3001
 
