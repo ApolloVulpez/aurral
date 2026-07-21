@@ -13,7 +13,6 @@ const {  start: startDiscoveryPlaylistBuildWorker,
   processJob: runQueuedDiscoverPlaylistBuild,
   idlePollS: 5,
   retryDelayS: 120,
-  maxAttempts: 3,
   onFinalFailure: (job, error) =>
     emitDiscoverPlaylistBuildFailure(job.payload, error),
 });

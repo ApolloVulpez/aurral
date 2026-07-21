@@ -9,7 +9,6 @@
     "start": "node --env-file=.env server.js",
     "dev": "node --watch --env-file=.env server.js",
     "test": "cd .. && npm test",
-    "postinstall": "node scripts/patchHonkerApi.js",
     "auth:reset-admin-password": "node --env-file=.env scripts/resetAdminPassword.js"
   },
   "keywords": [
@@ -20,13 +19,13 @@
   "author": "",
   "license": "MIT",
   "optionalDependencies": {
-    "@russellthehippo/honker-node-darwin-arm64": "0.3.3",
-    "@russellthehippo/honker-node-darwin-x64": "0.3.3",
-    "@russellthehippo/honker-node-linux-arm64-gnu": "0.3.3",
-    "@russellthehippo/honker-node-linux-x64-gnu": "0.3.3"
+    "@russellthehippo/honker-node-darwin-arm64": "0.4.2",
+    "@russellthehippo/honker-node-darwin-x64": "0.4.2",
+    "@russellthehippo/honker-node-linux-arm64-gnu": "0.4.2",
+    "@russellthehippo/honker-node-linux-x64-gnu": "0.4.2"
   },
   "dependencies": {
-    "@russellthehippo/honker-node": "^0.3.3",
+    "@russellthehippo/honker-node": "^0.4.2",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.10.0",
     "express": "^5.2.1",

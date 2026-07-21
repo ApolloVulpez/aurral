@@ -41,7 +41,6 @@ const {  start: startImagePrefetchWorker,
   processJob: processImagePrefetch,
   idlePollS: 10,
   retryDelayS: 60,
-  maxAttempts: 4,
 });
 
 export {

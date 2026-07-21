@@ -1101,29 +1101,10 @@ export async function clearStaleHonkerJobs() {
   for (const row of staleRows) {
     try {
       const queue = getHonkerQueueByName(row.queue);
-      if (queue) {
-        honkerDb.query(`UPDATE _honker_live SET claim_expires_at = ? WHERE id = ?`, [
-          now - 1,
-          row.id,
-        ]);
-        swept += Number(queue.sweepExpired()) || 0;
+      if (!queue) {
+        throw new Error(`Unknown Honker queue: ${row.queue}`);
       }
-
-      const stillLive = honkerDb.query(`SELECT id FROM _honker_live WHERE id = ? LIMIT 1`, [
-        row.id,
-      ]);
-      if (stillLive.length > 0) {
-        const tx = honkerDb.transaction();
-        try {
-          tx.execute("DELETE FROM _honker_live WHERE id = ?", [row.id]);
-          tx.commit();
-        } catch (error) {
-          try {
-            tx.rollback();
-          } catch {}
-          throw error;
-        }
-      }
+      queue.cancel(row.id);
 
       if (row.run_id) {
         recordHonkerTaskRunFinished(Number(row.run_id), "failed", clearedReason);

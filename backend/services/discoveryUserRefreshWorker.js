@@ -35,7 +35,6 @@ const {  start: startDiscoveryUserRefreshWorker,
   processJob: processDiscoveryUserRefresh,
   idlePollS: 10,
   retryDelayS: 300,
-  maxAttempts: 4,
 });
 
 export {

@@ -12,7 +12,6 @@ const {
   processJob: (payload) => weeklyFlowWorker.runQueuedReserveBuild(payload),
   idlePollS: 10,
   retryDelayS: 120,
-  maxAttempts: 3,
 });
 
 export {

@@ -50,7 +50,6 @@ const {
   getQueue: getLibraryScanQueue,
   idlePollS: 10,
   retryDelayS: 60,
-  maxAttempts: 3,
   filterJob(job) {
     const scheduledJobId = getScheduledLibraryScanJobId();
     if (scheduledJobId != null && scheduledJobId !== job.id) {

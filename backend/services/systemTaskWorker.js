@@ -87,7 +87,6 @@ const {
   processJob: processSystemTask,
   idlePollS: 10,
   retryDelayS: 120,
-  maxAttempts: 3,
 });
 
 export {

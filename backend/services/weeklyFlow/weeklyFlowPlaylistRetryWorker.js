@@ -11,7 +11,6 @@ const {
   getQueue: getPlaylistRetryQueue,
   idlePollS: 10,
   retryDelayS: 300,
-  maxAttempts: 4,
   filterJob(job) {
     const playlistType = String(job.payload?.playlistType || "").trim();
     const scheduledJobId = playlistType

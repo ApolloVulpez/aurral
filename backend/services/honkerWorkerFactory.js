@@ -14,7 +14,6 @@ export default function createHonkerWorker({
   processJob,
   idlePollS,
   retryDelayS = 300,
-  maxAttempts = 3,
   shouldRestart,
   onStart,
   filterJob,
@@ -29,8 +28,16 @@ export default function createHonkerWorker({
   let stopRequested = false;
   let idleController = null;
 
-  async function handleJobFailure(error, job) {
+  async function handleJobFailure(error, job, queue) {
     const message = error?.message || String(error);
+    let attemptLimit = Number(queue.maxAttempts) || 3;
+    try {
+      const storedJob = queue.getJob(job.id);
+      const storedLimit = Number(storedJob?.max_attempts);
+      if (Number.isFinite(storedLimit) && storedLimit > 0) {
+        attemptLimit = storedLimit;
+      }
+    } catch {}
     if (typeof onJobError === "function") {
       onJobError(error, job);
     }
@@ -48,7 +55,7 @@ export default function createHonkerWorker({
         return;
       }
     }
-    if (job.attempts >= maxAttempts) {
+    if (job.attempts >= attemptLimit) {
       job.fail(message);
       if (typeof onFinalFailure === "function") {
         await onFinalFailure(job, error);
@@ -87,7 +94,7 @@ export default function createHonkerWorker({
             onJobSuccess(job.payload, job);
           }
         } catch (error) {
-          await handleJobFailure(error, job);
+          await handleJobFailure(error, job, queue);
         }
         idleController.arm();
       }

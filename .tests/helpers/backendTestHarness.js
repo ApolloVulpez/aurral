@@ -48,6 +48,12 @@ export function applyIsolatedBackendEnv(paths) {
 export async function cleanupIsolatedState(paths) {
   if (!paths?.baseDir) return;
   try {
+    const honkerRuntime = await importFromRepo(
+      "backend/services/honkerWorkerRuntime.js",
+    );
+    await honkerRuntime.shutdownHonkerInfrastructure({ timeoutMs: 5000 });
+  } catch {}
+  try {
     const honkerDb = await importFromRepo("backend/services/honkerDb.js");
     honkerDb.closeHonkerDb();
   } catch {}

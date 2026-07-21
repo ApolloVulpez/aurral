@@ -67,6 +67,7 @@ export const SCHEDULED_SYSTEM_TASKS = [
     queue: "playlist-mbid-enrichment",
     schedule: "@every 6h",
     payload: { kind: "playlist-mbid-enrichment-sweep", reason: "schedule" },
+    maxAttempts: 4,
   },
 ];
 
@@ -298,24 +299,49 @@ export function enqueueNotification(payload) {
 
 export function bootstrapHonkerSchedules() {
   const scheduler = getHonkerDb().scheduler();
-  const canonicalNames = new Set(SCHEDULED_SYSTEM_TASKS.map((t) => t.name));
+  const canonicalByName = new Map(SCHEDULED_SYSTEM_TASKS.map((task) => [task.name, task]));
+  const existingByName = new Map(scheduler.list().map((row) => [row.name, row]));
 
-  try {
-    const rows = getHonkerDb().query("SELECT name FROM _honker_scheduler_tasks");
-    for (const row of rows) {
-      if (!canonicalNames.has(row.name)) {
-        try {
-          scheduler.remove(row.name);
-        } catch {}
-      }
+  for (const row of existingByName.values()) {
+    if (!canonicalByName.has(row.name)) {
+      scheduler.remove(row.name);
     }
-  } catch {}
+  }
 
   for (const task of SCHEDULED_SYSTEM_TASKS) {
-    try {
+    const existing = existingByName.get(task.name);
+    if (!existing) {
+      scheduler.add(task);
+      continue;
+    }
+
+    const priority = Number(task.priority ?? 0);
+    const expiresS = task.expiresS ?? null;
+    const maxAttempts = Number(task.maxAttempts ?? 3);
+    const payloadText = JSON.stringify(task.payload ?? null);
+
+    // Queue changes require re-registration. Other fields can use the
+    // supported update API so an unchanged schedule keeps next_fire_at.
+    if (existing.queue !== task.queue) {
       scheduler.remove(task.name);
-    } catch {}
-    scheduler.add(task);
+      scheduler.add(task);
+      continue;
+    }
+
+    const updates = {};
+    if (existing.cron_expr !== task.schedule) updates.schedule = task.schedule;
+    if (existing.payload !== payloadText) updates.payload = task.payload;
+    if (Number(existing.priority) !== priority) updates.priority = priority;
+    if ((existing.expires_s ?? null) !== expiresS) updates.expiresS = expiresS;
+    if (Number(existing.max_attempts ?? 3) !== maxAttempts) {
+      updates.maxAttempts = maxAttempts;
+    }
+    if (Object.keys(updates).length > 0) {
+      scheduler.update(task.name, updates);
+    }
+    if (existing.enabled === false) {
+      scheduler.resume(task.name);
+    }
   }
 }
 
@@ -369,7 +395,6 @@ export function closeHonkerDb() {
   for (const reset of allQueues) {
     reset();
   }
-  queueByName.clear();
   notificationOutbox = null;
 }
 
@@ -471,29 +496,6 @@ export function getHonkerQueueDepth(queueName) {
     [safeQueue, now],
   )[0];
   return Number(row?.count) || 0;
-}
-
-export function resetProcessingPipelineJobs() {
-  try {
-    const now = Math.floor(Date.now() / 1000);
-    const tx = getHonkerDb().transaction();
-    const result = tx.query(
-      `SELECT COUNT(*) AS count FROM _honker_live WHERE queue = 'slskd-pipeline' AND state = 'processing'`,
-    );
-    const stuck = Number(result[0]?.count) || 0;
-    if (stuck > 0) {
-      tx.execute(
-        `UPDATE _honker_live
-         SET state = 'pending', run_at = ?
-         WHERE queue = 'slskd-pipeline'
-           AND state = 'processing'`,
-        [now],
-      );
-      console.log("[pipeline] reset", stuck, "stuck processing jobs to pending");
-    }
-    tx.commit();
-  } catch {
-  }
 }
 
 export function sweepAllHonkerQueues() {

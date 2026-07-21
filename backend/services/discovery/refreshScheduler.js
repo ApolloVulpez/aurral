@@ -4,6 +4,7 @@ import { libraryManager } from "../libraryManager.js";
 import {
   enqueueDiscoveryRefreshJob,
   getHonkerDb,
+  getDiscoveryRefreshQueue,
   isHonkerLockHeld,
 } from "../honkerDb.js";
 import {
@@ -69,19 +70,12 @@ export function pruneDuplicateScheduledDiscoveryRefreshes() {
     });
     if (scheduled.length <= 1) return 0;
     const removeIds = scheduled.slice(1).map((row) => row.id);
-    const tx = getHonkerDb().transaction();
-    try {
-      for (const id of removeIds) {
-        tx.execute("DELETE FROM _honker_live WHERE id = ?", [id]);
-      }
-      tx.commit();
-    } catch (error) {
-      try {
-        tx.rollback();
-      } catch {}
-      throw error;
+    const queue = getDiscoveryRefreshQueue();
+    let removed = 0;
+    for (const id of removeIds) {
+      if (queue.cancel(id)) removed += 1;
     }
-    return removeIds.length;
+    return removed;
   } catch {
     return 0;
   }

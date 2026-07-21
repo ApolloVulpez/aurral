@@ -1,5 +1,5 @@
 import createHonkerWorker from "./honkerWorkerFactory.js";
-import { getPipelineQueue, resetProcessingPipelineJobs } from "./honkerDb.js";
+import { getPipelineQueue } from "./honkerDb.js";
 import {
   continuePipeline,
   processPipelinePayload,
@@ -17,12 +17,10 @@ const {
   getQueue: getPipelineQueue,
   idlePollS: 2,
   retryDelayS: 30,
-  maxAttempts: 4,
   shouldRestart: () => isAnyDownloadSourceConfigured(),
   onStart() {
     if (!isAnyDownloadSourceConfigured()) return false;
     console.log("[pipeline] worker starting");
-    resetProcessingPipelineJobs();
     enqueuePendingJobsWithoutBatch();
     return true;
   },

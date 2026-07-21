@@ -34,7 +34,6 @@ const {  start: startPlaylistMbidEnrichmentWorker,
   processJob: processPlaylistMbidEnrichment,
   idlePollS: 10,
   retryDelayS: 300,
-  maxAttempts: 4,
 });
 
 export {

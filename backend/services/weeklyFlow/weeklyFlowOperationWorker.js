@@ -23,7 +23,6 @@ const worker = createHonkerWorker({
   processJob: processWeeklyFlowOperation,
   idlePollS: 5,
   retryDelayS: 60,
-  maxAttempts: 3,
   onJobDequeue(payload) {
     currentLabel = payload?.label || payload?.kind || null;
     syncWorkerState();

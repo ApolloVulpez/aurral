@@ -43,7 +43,6 @@ const {  start: startDiscoveryRefreshWorker,
   processJob: runDiscoveryRefresh,
   idlePollS: 5,
   retryDelayS: 300,
-  maxAttempts: 3,
   onJobDequeue: markDiscoveryRefreshDequeued,
   onJobSuccess: scheduleNextDiscoveryRefresh,
   onJobError: () => {
