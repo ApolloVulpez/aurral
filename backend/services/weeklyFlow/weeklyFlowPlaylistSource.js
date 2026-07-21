@@ -1,7 +1,7 @@
 import { lastfmRequest, getLastfmApiKey } from "../apiClients/index.js";
 import { getDiscoveryCache } from "../discovery/index.js";
 import { normalizeWeightMap } from "./weeklyFlowPlaylistConfig.js";
-import { getDiscoveryFeedback } from "../discovery/feedback.js";
+import { getBlockedArtistKeys } from "../discovery/feedback.js";
 import { mapWithConcurrency } from "../discovery/helpers.js";
 const LASTFM_HARVEST_CONCURRENCY = 12;
 const ARTIST_TOP_TRACKS_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -233,21 +233,23 @@ export class WeeklyFlowPlaylistSource {
   }
 
   _artistKeysFromArtist(artist) {
-    return [artist?.id, artist?.mbid, artist?.foreignArtistId, artist?.name, artist?.artistName]
+    const aliases = Array.isArray(artist?.artistAliases) ? artist.artistAliases : [];
+    return [
+      artist?.id,
+      artist?.mbid,
+      artist?.foreignArtistId,
+      artist?.artistMbid,
+      artist?.name,
+      artist?.artistName,
+      ...aliases,
+    ]
       .map((value) => this._artistKey(value))
       .filter(Boolean);
   }
 
   _buildFeedbackExcludeKeys(ownerUserId) {
     if (ownerUserId == null) return [];
-    const feedback = getDiscoveryFeedback(String(ownerUserId));
-    const keys = new Set();
-    for (const entry of feedback) {
-      if (entry.action !== "less_like_this") continue;
-      if (entry.artistId) keys.add(this._artistKey(entry.artistId));
-      if (entry.artistName) keys.add(this._artistKey(entry.artistName));
-    }
-    return [...keys];
+    return [...getBlockedArtistKeys(String(ownerUserId))];
   }
 
   _trackArtistKey(track) {
@@ -380,10 +382,12 @@ export class WeeklyFlowPlaylistSource {
 
   _filterTracksByArtists(tracks, includeSet, excludeSet) {
     return (tracks || []).filter((track) => {
-      const artistKey = this._trackArtistKey(track);
-      if (!artistKey) return false;
-      if (excludeSet?.has(artistKey)) return false;
-      if (includeSet && includeSet.size > 0 && !includeSet.has(artistKey)) return false;
+      const artistKeys = this._artistKeysFromArtist(track);
+      if (artistKeys.length === 0) return false;
+      if (excludeSet && artistKeys.some((key) => excludeSet.has(key))) return false;
+      if (includeSet && includeSet.size > 0 && !artistKeys.some((key) => includeSet.has(key))) {
+        return false;
+      }
       return true;
     });
   }
@@ -1451,9 +1455,9 @@ export class WeeklyFlowPlaylistSource {
     const picked = [];
     for (const candidate of Array.isArray(candidates) ? candidates : []) {
       if (picked.length >= count) break;
-      const artistKey = this._trackArtistKey(candidate);
-      if (!artistKey || usedArtistKeys.has(artistKey)) continue;
-      usedArtistKeys.add(artistKey);
+      const artistKeys = this._artistKeysFromArtist(candidate);
+      if (artistKeys.length === 0 || artistKeys.some((key) => usedArtistKeys.has(key))) continue;
+      artistKeys.forEach((key) => usedArtistKeys.add(key));
       picked.push(candidate);
     }
     return picked;
@@ -1524,10 +1528,12 @@ export class WeeklyFlowPlaylistSource {
           discoverTracks
             .map((track, index) => this._buildBaseCandidate(track, "discover", index))
             .filter((candidate) => {
-              const artistKey = this._trackArtistKey(candidate);
               return (
-                artistKey &&
-                !nonLibraryExcludeArtistKeys.has(artistKey) &&
+                this._filterTracksByArtists(
+                  [candidate],
+                  null,
+                  nonLibraryExcludeArtistKeys,
+                ).length > 0 &&
                 !excludeTrackKeys.has(candidate.trackKey)
               );
             }),
@@ -1536,10 +1542,8 @@ export class WeeklyFlowPlaylistSource {
           mixTracks
             .map((track, index) => this._buildBaseCandidate(track, "mix", index))
             .filter((candidate) => {
-              const artistKey = this._trackArtistKey(candidate);
               return (
-                artistKey &&
-                !excludeArtistKeys.has(artistKey) &&
+                this._filterTracksByArtists([candidate], null, excludeArtistKeys).length > 0 &&
                 !excludeTrackKeys.has(candidate.trackKey)
               );
             }),
@@ -1548,10 +1552,12 @@ export class WeeklyFlowPlaylistSource {
           trendingTracks
             .map((track, index) => this._buildBaseCandidate(track, "trending", index))
             .filter((candidate) => {
-              const artistKey = this._trackArtistKey(candidate);
               return (
-                artistKey &&
-                !nonLibraryExcludeArtistKeys.has(artistKey) &&
+                this._filterTracksByArtists(
+                  [candidate],
+                  null,
+                  nonLibraryExcludeArtistKeys,
+                ).length > 0 &&
                 !excludeTrackKeys.has(candidate.trackKey)
               );
             }),
@@ -1649,10 +1655,15 @@ export class WeeklyFlowPlaylistSource {
       Number.isFinite(requestedSize) && requestedSize > 0 ? Math.round(requestedSize) : 30;
     if (flow?.discoverPresetId === "release-radar") {
       const basedOn = options?.basedOn || this._resolveDiscoveryCache(options)?.basedOn || [];
-      const primaryTracks = await this.getReleaseRadarTracks(targetSize, {
+      const generatedTracks = await this.getReleaseRadarTracks(targetSize, {
         listenHistoryProfile: options?.listenHistoryProfile || null,
         basedOn,
       });
+      const primaryTracks = this._filterTracksByArtists(
+        generatedTracks,
+        null,
+        new Set(this._buildFeedbackExcludeKeys(flow?.ownerUserId)),
+      );
       return {
         primaryTracks,
         reserveTracks: [],
@@ -1663,7 +1674,12 @@ export class WeeklyFlowPlaylistSource {
       };
     }
     if (flow?.type === "editorial" && flow?.tag) {
-      const primaryTracks = await this.getEditorialTagTracks(flow.tag, targetSize);
+      const generatedTracks = await this.getEditorialTagTracks(flow.tag, targetSize);
+      const primaryTracks = this._filterTracksByArtists(
+        generatedTracks,
+        null,
+        new Set(this._buildFeedbackExcludeKeys(flow?.ownerUserId)),
+      );
       return {
         primaryTracks,
         reserveTracks: [],

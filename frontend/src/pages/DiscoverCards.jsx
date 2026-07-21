@@ -166,6 +166,7 @@ export const ArtistCard = memo(
       prevProps.canAddArtist === nextProps.canAddArtist &&
       prevProps.feedbackUsed?.more_like_this === nextProps.feedbackUsed?.more_like_this &&
       prevProps.feedbackUsed?.less_like_this === nextProps.feedbackUsed?.less_like_this &&
+      prevProps.feedbackUsed?.block_artist === nextProps.feedbackUsed?.block_artist &&
       prevProps.onNavigate === nextProps.onNavigate &&
       prevProps.onAddToLibrary === nextProps.onAddToLibrary &&
       prevProps.onFeedback === nextProps.onFeedback

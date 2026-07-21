@@ -187,13 +187,23 @@ test("full two-phase refresh cycles reach the 500 pool cap", () => {
   );
 });
 
-test("filterRecommendationsForServe keeps stored order and hides exact negative feedback", () => {
+test("filterRecommendationsForServe keeps less-like artists and hides only exact blocks", () => {
   const storedPool = artists.makeBatch(5, 180, "stored");
   const hidden = storedPool[2];
-  const filtered = filterRecommendationsForServe(storedPool, [
+  const lessLike = filterRecommendationsForServe(storedPool, [
     {
       artistId: hidden.id,
       action: "less_like_this",
+    },
+  ]);
+
+  assert.equal(lessLike.length, 5);
+  assert.deepEqual(lessLike.map((item) => item.name), storedPool.map((item) => item.name));
+
+  const filtered = filterRecommendationsForServe(storedPool, [
+    {
+      artistId: hidden.id,
+      action: "block_artist",
     },
   ]);
 

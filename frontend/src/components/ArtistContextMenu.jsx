@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Library, Loader2, MoreVertical, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Ban, Library, Loader2, MoreVertical, ThumbsDown, ThumbsUp } from "lucide-react";
 import { getDiscoveryFeedbackLabel } from "../utils/discoveryFeedback";
 
 const MAIN_CONTENT_PORTAL_SELECTOR = ".app-main-wrap";
@@ -61,7 +61,7 @@ export function ArtistContextMenu({
   const estimateMenuHeight = useCallback(() => {
     let items = 0;
     if (canAddArtist && onAddToLibrary) items += 1;
-    if (onFeedback) items += 2;
+    if (onFeedback) items += 3;
     return Math.max(items, 1) * 42 + 8;
   }, [canAddArtist, onAddToLibrary, onFeedback]);
 
@@ -260,6 +260,21 @@ export function ArtistContextMenu({
                         <ThumbsDown className="artist-icon-sm" />
                       )}
                       {getDiscoveryFeedbackLabel("less_like_this")}
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => handleFeedbackClick(event, "block_artist")}
+                    disabled={!!pendingAction}
+                    className={`artist-menu-item--discover artist-menu-item--danger${feedbackUsed.block_artist ? " is-selected" : ""}`}
+                  >
+                    <div className="artist-menu-item__main--discover">
+                      {pendingAction === "block_artist" ? (
+                        <Loader2 className="artist-icon-sm animate-spin" />
+                      ) : (
+                        <Ban className="artist-icon-sm" />
+                      )}
+                      {feedbackUsed.block_artist ? "Unblock artist" : getDiscoveryFeedbackLabel("block_artist")}
                     </div>
                   </button>
                 </>

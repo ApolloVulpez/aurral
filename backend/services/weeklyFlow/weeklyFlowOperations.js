@@ -34,6 +34,7 @@ import {
 import { withHonkerLock } from "../honkerDb.js";
 import { getUnavailableFlowSourceError } from "./weeklyFlowValidation.js";
 import { schedulePlaylistMbidEnrichment } from "../playlistMbidEnrichmentService.js";
+import { filterBlockedArtistsForUser } from "../discovery/feedback.js";
 
 const OPERATION_TOKENS_KEY = "weeklyFlowOperationTokens";
 
@@ -65,6 +66,11 @@ function normalizeTrackList(value) {
     .map((track) => normalizeSharedTrack(track))
     .filter(Boolean);
 }
+
+const filterBlockedPlaylistTracks = (ownerUserId, tracks) => {
+  if (ownerUserId == null) return tracks;
+  return filterBlockedArtistsForUser(String(ownerUserId), tracks);
+};
 
 const removePlaylistLocalTrackFile = async (job, playlistId) => {
   if (!job || typeof job.finalPath !== "string") return;
@@ -164,7 +170,9 @@ const recordPlaylistHistory = (playlistId, { tracksQueued = 0, tracksReused = 0 
 };
 
 async function seedSharedPlaylistTracks(playlistId, tracks) {
-  const missingTracks = filterTracksMissingDownloadJobs(tracks, playlistId);
+  const playlist = flowPlaylistConfig.getSharedPlaylist(playlistId);
+  const allowedTracks = filterBlockedPlaylistTracks(playlist?.ownerUserId, tracks);
+  const missingTracks = filterTracksMissingDownloadJobs(allowedTracks, playlistId);
   const { reusedJobIds, tracksToQueue } = await reuseTracksForPlaylist(missingTracks, playlistId);
   const jobIds = downloadTracker.addJobs(tracksToQueue, playlistId);
   playlistManager.updateConfig(false);
@@ -342,7 +350,10 @@ async function createSharedPlaylist({
   importSource = null,
 } = {}) {
   const safePlaylistId = String(playlistId || "").trim() || randomUUID();
-  const normalizedTracks = normalizeTrackList(tracks);
+  const normalizedTracks = filterBlockedPlaylistTracks(
+    ownerUserId,
+    normalizeTrackList(tracks),
+  );
   let playlist = flowPlaylistConfig.getSharedPlaylist(safePlaylistId);
   if (!playlist) {
     playlist = flowPlaylistConfig.createSharedPlaylist({
@@ -380,7 +391,11 @@ export async function appendSharedPlaylistTracks({ playlistId, tracks = [] } = {
   const safePlaylistId = String(playlistId || "").trim();
   const playlist = flowPlaylistConfig.getSharedPlaylist(safePlaylistId);
   if (!playlist) return { missing: true };
-  const tracksToAdd = filterMissingSharedTracks(playlist.tracks, tracks);
+  const allowedTracks = filterBlockedPlaylistTracks(
+    playlist.ownerUserId,
+    normalizeTrackList(tracks),
+  );
+  const tracksToAdd = filterMissingSharedTracks(playlist.tracks, allowedTracks);
   const updatedPlaylist =
     tracksToAdd.length > 0
       ? flowPlaylistConfig.appendSharedPlaylistTracks(safePlaylistId, tracksToAdd)
@@ -428,7 +443,10 @@ async function updateSharedPlaylist({
   if (!hasTracksUpdate) {
     playlist = flowPlaylistConfig.updateSharedPlaylist(safePlaylistId, playlistUpdates);
   } else {
-    const normalizedTracks = normalizeTrackList(tracks);
+    const normalizedTracks = filterBlockedPlaylistTracks(
+      currentPlaylist.ownerUserId,
+      normalizeTrackList(tracks),
+    );
     await withPlaylistMutation(safePlaylistId, async () => {
       const existingJobs = downloadTracker.getByPlaylistType(safePlaylistId);
       const reusableJobsByIdentity = new Map();

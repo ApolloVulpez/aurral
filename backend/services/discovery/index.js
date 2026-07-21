@@ -18,6 +18,9 @@ export {
   addDiscoveryFeedback,
   removeDiscoveryFeedback,
   resetDiscoveryFeedback,
+  getBlockedArtistKeys,
+  isArtistBlockedForUser,
+  filterBlockedArtistsForUser,
 } from "./feedback.js";
 
 export {

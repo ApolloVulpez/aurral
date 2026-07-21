@@ -33,7 +33,7 @@ export function SettingsAccountTab({
   const handleResetDiscoveryTastes = async () => {
     if (resettingTastes) return;
     const confirmed = window.confirm(
-      "Reset all More like this and Less like this preferences? This cannot be undone.",
+      "Reset all More like this and Less like this preferences? Blocked artists will be kept.",
     );
     if (!confirmed) return;
     setResettingTastes(true);
@@ -208,6 +208,7 @@ export function SettingsAccountTab({
             <h3 className="settings-page__section-title">Discovery Tastes</h3>
             <p className="settings-page__section-note">
               Clear your More like this and Less like this feedback so recommendations start fresh.
+              Manage hard exclusions on the <Link to="/blocklist" className="settings-page__link">Blocked Artists</Link> page.
             </p>
           </div>
           <button

@@ -53,7 +53,9 @@ export function useArtistTasteFeedback() {
           showSuccess(
             action === "more_like_this"
               ? "We’ll bias future picks toward this taste"
-              : "We’ll show less like this",
+              : action === "less_like_this"
+                ? "We’ll show less like this"
+                : "Artist blocked from recommendations and playlist downloads",
           );
         }
         return true;

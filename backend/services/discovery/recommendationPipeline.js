@@ -572,10 +572,15 @@ const feedbackBoostForCandidate = (candidate, feedbackList = []) => {
         break;
       case "less_like_this":
         if (exactMatch) {
-          hidden = true;
-          adjustment -= 100000;
+          adjustment -= 16;
         } else if (contextualMatch) {
           adjustment -= 10 + tagOverlap * 2;
+        }
+        break;
+      case "block_artist":
+        if (exactMatch) {
+          hidden = true;
+          adjustment -= 100000;
         }
         break;
       default:

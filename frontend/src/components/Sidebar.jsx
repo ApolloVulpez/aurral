@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Library, Sparkles, Activity, AudioWaveform, Ticket, Settings } from "lucide-react";
+import { Ban, Library, Sparkles, Activity, AudioWaveform, Ticket, Settings } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useFlowWorkerActivity } from "../pages/flows/useFlowWorkerActivity";
 import { DEFAULT_SETTINGS_TAB, SETTINGS_NAV_TABS } from "../pages/Settings/settingsTabsConfig";
@@ -152,6 +152,7 @@ function Sidebar({ mode, width = 208 }) {
         section: "activity",
         subnav: ACTIVITY_VIEWS,
       },
+      { path: "/blocklist", label: "Blocked Artists", icon: Ban },
     ];
     return items.filter(
       (item) =>

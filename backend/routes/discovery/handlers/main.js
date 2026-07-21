@@ -34,8 +34,12 @@ export function registerMain(router) {
 
   router.get("/related", requireAuth, (req, res) => {
     const discoveryCache = getDiscoveryCache();
+    const feedback = getDiscoveryFeedback(req.user?.id || "global");
     res.json({
-      recommendations: discoveryCache.recommendations,
+      recommendations: serveCachedRecommendations({
+        recommendations: discoveryCache.recommendations,
+        feedback,
+      }),
       basedOn: discoveryCache.basedOn,
       total: discoveryCache.recommendations.length,
     });
@@ -70,6 +74,10 @@ export function registerMain(router) {
       );
       recommendations = serveCachedRecommendations({
         recommendations,
+        feedback,
+      });
+      globalTop = serveCachedRecommendations({
+        recommendations: globalTop,
         feedback,
       });
 

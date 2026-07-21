@@ -53,7 +53,10 @@ export function registerShows(router) {
           }).slice(0, 24)
         : [];
       const trendingArtists = localDiscoveryPreferences.includeTrending
-        ? (discoveryCache.globalTop || []).slice(0, 18)
+        ? serveCachedRecommendations({
+            recommendations: discoveryCache.globalTop || [],
+            feedback,
+          }).slice(0, 18)
         : [];
       const nearbyShows = await getNearbyShows({
         req,

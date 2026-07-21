@@ -6,7 +6,9 @@ const getDiscoveryFeedbackKey = (userId = "global") =>
 
 const normalizeFeedbackAction = (value) => {
   const action = String(value || "").trim().toLowerCase();
-  return ["more_like_this", "less_like_this"].includes(action) ? action : null;
+  return ["more_like_this", "less_like_this", "block_artist"].includes(action)
+    ? action
+    : null;
 };
 
 const normalizeFeedbackList = (value) =>
@@ -32,6 +34,53 @@ const normalizeFeedbackList = (value) =>
 
 export const getDiscoveryFeedback = (userId = "global") =>
   normalizeFeedbackList(dbOps.getJSONSetting(getDiscoveryFeedbackKey(userId)));
+
+const normalizeArtistKey = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase();
+
+export const getBlockedArtistKeys = (userId = "global") => {
+  const keys = new Set();
+  for (const entry of getDiscoveryFeedback(userId)) {
+    if (entry.action !== "block_artist") continue;
+    const artistId = normalizeArtistKey(entry.artistId);
+    const artistName = normalizeArtistKey(entry.artistName);
+    if (artistId) keys.add(artistId);
+    if (artistName) keys.add(artistName);
+  }
+  return keys;
+};
+
+export const isArtistBlockedForUser = (userId = "global", artist = {}) => {
+  const blockedKeys = getBlockedArtistKeys(userId);
+  if (blockedKeys.size === 0) return false;
+  return artistMatchesBlockedKeys(artist, blockedKeys);
+};
+
+const artistMatchesBlockedKeys = (artist, blockedKeys) => {
+  const aliases = Array.isArray(artist?.artistAliases) ? artist.artistAliases : [];
+  const artistKeys = [
+    artist?.id,
+    artist?.mbid,
+    artist?.foreignArtistId,
+    artist?.artistMbid,
+    artist?.name,
+    artist?.artistName,
+    ...aliases,
+  ]
+    .map(normalizeArtistKey)
+    .filter(Boolean);
+  return artistKeys.some((key) => blockedKeys.has(key));
+};
+
+export const filterBlockedArtistsForUser = (userId = "global", artists = []) => {
+  const blockedKeys = getBlockedArtistKeys(userId);
+  if (blockedKeys.size === 0) return Array.isArray(artists) ? artists : [];
+  return (Array.isArray(artists) ? artists : []).filter(
+    (artist) => !artistMatchesBlockedKeys(artist, blockedKeys),
+  );
+};
 
 export const addDiscoveryFeedback = (userId = "global", entry = {}) => {
   const action = normalizeFeedbackAction(entry.action);
@@ -80,6 +129,9 @@ export const removeDiscoveryFeedback = (userId = "global", feedbackId) => {
 };
 
 export const resetDiscoveryFeedback = (userId = "global") => {
-  dbOps.setJSONSetting(getDiscoveryFeedbackKey(userId), []);
-  return [];
+  const blockedArtists = getDiscoveryFeedback(userId).filter(
+    (entry) => entry.action === "block_artist",
+  );
+  dbOps.setJSONSetting(getDiscoveryFeedbackKey(userId), blockedArtists);
+  return blockedArtists;
 };

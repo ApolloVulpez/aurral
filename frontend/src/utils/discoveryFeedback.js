@@ -1,8 +1,13 @@
-const RATING_FEEDBACK_ACTIONS = new Set(["more_like_this", "less_like_this"]);
+const ARTIST_FEEDBACK_ACTIONS = new Set([
+  "more_like_this",
+  "less_like_this",
+  "block_artist",
+]);
 
 export const DISCOVERY_FEEDBACK_LABELS = {
   more_like_this: "More like this",
   less_like_this: "Less like this",
+  block_artist: "Block artist",
 };
 
 export const normalizeDiscoveryFeedbackList = (value) => {
@@ -13,16 +18,17 @@ export const normalizeDiscoveryFeedbackList = (value) => {
 };
 
 const getArtistMatchKeys = (artist) => {
-  const artistId = String(artist?.id || artist?.mbid || artist?.foreignArtistId || "")
-    .trim()
-    .toLowerCase();
-  const artistName = String(artist?.name || artist?.artistName || "")
-    .trim()
-    .toLowerCase();
   const keys = [];
-  if (artistId) keys.push(`id:${artistId}`);
-  if (artistName) keys.push(`name:${artistName}`);
-  return keys;
+  for (const value of [artist?.id, artist?.mbid, artist?.foreignArtistId, artist?.artistMbid]) {
+    const artistId = String(value || "").trim().toLowerCase();
+    if (artistId) keys.push(`id:${artistId}`);
+  }
+  const aliases = Array.isArray(artist?.artistAliases) ? artist.artistAliases : [];
+  for (const value of [artist?.name, artist?.artistName, ...aliases]) {
+    const artistName = String(value || "").trim().toLowerCase();
+    if (artistName) keys.push(`name:${artistName}`);
+  }
+  return [...new Set(keys)];
 };
 
 const entryMatchesArtist = (entry, artist) => {
@@ -36,6 +42,11 @@ const entryMatchesArtist = (entry, artist) => {
   if (entryId && artistKeys.has(`id:${entryId}`)) return true;
   if (entryName && artistKeys.has(`name:${entryName}`)) return true;
   return false;
+};
+
+export const artistsShareDiscoveryIdentity = (left, right) => {
+  const leftKeys = new Set(getArtistMatchKeys(left));
+  return getArtistMatchKeys(right).some((key) => leftKeys.has(key));
 };
 
 export const getOppositeRatingAction = (action) => {
@@ -58,7 +69,7 @@ export const buildArtistFeedbackLookup = (feedbackList) => {
   const lookup = new Map();
   for (const entry of normalizeDiscoveryFeedbackList(feedbackList)) {
     const action = String(entry?.action || "").trim();
-    if (!RATING_FEEDBACK_ACTIONS.has(action)) continue;
+    if (!ARTIST_FEEDBACK_ACTIONS.has(action)) continue;
     const artistId = String(entry?.artistId || "")
       .trim()
       .toLowerCase();
@@ -86,6 +97,7 @@ export const getArtistFeedbackFlags = (lookup, artist) => {
   return {
     more_like_this: actions.has("more_like_this"),
     less_like_this: actions.has("less_like_this"),
+    block_artist: actions.has("block_artist"),
   };
 };
 

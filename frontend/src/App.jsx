@@ -45,6 +45,7 @@ const ShowsPage = lazy(() => import("./pages/ShowsPage"));
 const LibraryPage = lazy(() => import("./pages/LibraryPage"));
 const SettingsPage = lazy(() => import("./pages/Settings/SettingsPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const BlocklistPage = lazy(() => import("./pages/BlocklistPage"));
 const ArtistDetailsPage = lazy(() => import("./pages/ArtistDetails/ArtistDetailsPage"));
 const ArtistReleaseListPage = lazy(() => import("./pages/ArtistDetails/ArtistReleaseListPage"));
 const ReleasePage = lazy(() => import("./pages/ArtistDetails/ReleasePage"));
@@ -313,6 +314,7 @@ function AppContent() {
                   }
                 />
                 <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/blocklist" element={<BlocklistPage />} />
               </Routes>
             </Suspense>
           </Layout>

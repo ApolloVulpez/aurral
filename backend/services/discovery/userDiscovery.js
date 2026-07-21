@@ -8,6 +8,7 @@ import {
   isGlobalDiscoveryRefreshInProgress,
   getDiscoveryMode,
   getDiscoveryFeedback,
+  filterBlockedArtistsForUser,
   serveCachedRecommendations,
 } from "./index.js";
 import { getLastfmApiKey } from "../apiClients/index.js";
@@ -144,6 +145,14 @@ export async function getUserDiscovery(userId, limit = 50, offset = 0) {
     recommendations,
     feedback,
   });
+  globalTop = serveCachedRecommendations({
+    recommendations: globalTop,
+    feedback,
+  });
+  fallbackGenres = (Array.isArray(fallbackGenres) ? fallbackGenres : []).map((section) => ({
+    ...section,
+    artists: filterBlockedArtistsForUser(userId || "global", section?.artists || []),
+  }));
 
   const parsedLastUpdated = lastUpdated ? new Date(lastUpdated).getTime() : 0;
   const staleMs = await getDiscoveryStaleMs();
@@ -174,10 +183,16 @@ export async function getUserDiscovery(userId, limit = 50, offset = 0) {
 
   const { annotateDiscoverPlaylistsForUser } =
     await import("./playlistBuilder.js");
-  const playlists = annotateDiscoverPlaylistsForUser(
-    discoverPlaylists,
-    userId,
-  ).filter((playlist) => playlist.trackCount > 0);
+  const playlists = annotateDiscoverPlaylistsForUser(discoverPlaylists, userId)
+    .map((playlist) => {
+      const tracks = filterBlockedArtistsForUser(userId || "global", playlist.tracks || []);
+      return {
+        ...playlist,
+        tracks,
+        trackCount: tracks.length,
+      };
+    })
+    .filter((playlist) => playlist.trackCount > 0);
 
   const playlistBuildStatus =
     getDiscoveryPlaylistBuildStatus(effectiveCacheNamespace);

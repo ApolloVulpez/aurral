@@ -9,6 +9,7 @@ import {
 import { getDiscovery } from "../utils/api/endpoints/discovery.js";
 import { getArtistRecordId } from "../utils/artistTaste";
 import { useArtistTasteFeedback } from "../hooks/useArtistTasteFeedback";
+import { artistsShareDiscoveryIdentity } from "../utils/discoveryFeedback";
 import { useNearbyShows } from "../hooks/useNearbyShows";
 import {
   readStoredRecentlyAdded,
@@ -461,8 +462,32 @@ export function useDiscoverData() {
   );
 
   const handleDiscoveryFeedback = useCallback(
-    (artist, action, options = {}) => submitFeedback(artist, action, options),
-    [submitFeedback],
+    async (artist, action, options = {}) => {
+      const saved = await submitFeedback(artist, action, options);
+      if (saved && action === "block_artist" && !options.isSelected) {
+        setData((current) => {
+          if (!current) return current;
+          const keepArtist = (candidate) => !artistsShareDiscoveryIdentity(candidate, artist);
+          const next = {
+            ...current,
+            recommendations: (current.recommendations || []).filter(keepArtist),
+            globalTop: (current.globalTop || []).filter(keepArtist),
+            fallbackGenres: (current.fallbackGenres || []).map((section) => ({
+              ...section,
+              artists: (section?.artists || []).filter(keepArtist),
+            })),
+            discoverPlaylists: (current.discoverPlaylists || []).map((playlist) => {
+              const tracks = (playlist?.tracks || []).filter(keepArtist);
+              return { ...playlist, tracks, trackCount: tracks.length };
+            }),
+          };
+          writeStoredDiscoveryData(next, authUser?.id);
+          return next;
+        });
+      }
+      return saved;
+    },
+    [authUser?.id, submitFeedback],
   );
 
   return {

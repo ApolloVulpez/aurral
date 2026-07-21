@@ -54,7 +54,7 @@ test("per-user refresh: rerankCachedRecommendations produces a personalized slic
     personalized.some(
       (item) => item.id === "00000000-0000-4000-8000-000000000000",
     ),
-    false,
+    true,
   );
   assert.ok(personalized[0].name !== "Global-Artist-0");
 });

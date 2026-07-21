@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  Ban,
   ChevronDown,
   Loader,
   MoreHorizontal,
@@ -261,6 +262,24 @@ export function ArtistDetailsActionBar({
                             <ThumbsDown className="artist-icon-sm" />
                           )}
                           {getDiscoveryFeedbackLabel("less_like_this")}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onTasteFeedback("block_artist");
+                          setShowMoreMenu(false);
+                        }}
+                        disabled={!!tasteActionPending}
+                        className={`artist-menu-item artist-menu-item--danger${tasteFeedbackUsed.block_artist ? " is-active" : ""}`}
+                      >
+                        <span className="artist-menu-item__main">
+                          {tasteActionPending === "block_artist" ? (
+                            <Loader className="artist-icon-sm animate-spin" />
+                          ) : (
+                            <Ban className="artist-icon-sm" />
+                          )}
+                          {tasteFeedbackUsed.block_artist ? "Unblock artist" : getDiscoveryFeedbackLabel("block_artist")}
                         </span>
                       </button>
                     </>

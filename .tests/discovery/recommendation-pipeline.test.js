@@ -128,7 +128,7 @@ test("mergeResolvedRecommendations collapses name and mbid variants of the same 
 });
 
 
-test("rerankRecommendations hides exact negative feedback and favors deeper mode diversification", () => {
+test("rerankRecommendations softens less-like feedback, hard-blocks exact artists, and favors deeper mode diversification", () => {
   const recommendations = [
     {
       id: "55555555-5555-5555-5555-555555555555",
@@ -170,12 +170,25 @@ test("rerankRecommendations hides exact negative feedback and favors deeper mode
       },
     ],
   });
-  assert.equal(deprioritized.length, 1);
+  assert.equal(deprioritized.length, 2);
   assert.equal(deprioritized[0].name, "Deeper Pick");
   assert.equal(
     deprioritized.some((item) => item.name === "Safe Pick"),
-    false,
+    true,
   );
+
+  const blocked = rerankRecommendations(recommendations, 10, {
+    discoveryMode: "balanced",
+    feedback: [
+      {
+        id: "block-safe",
+        artistId: "55555555-5555-5555-5555-555555555555",
+        action: "block_artist",
+      },
+    ],
+  });
+  assert.equal(blocked.length, 1);
+  assert.equal(blocked[0].name, "Deeper Pick");
 
   const deeper = rerankRecommendations(recommendations, 2, {
     discoveryMode: "deeper",

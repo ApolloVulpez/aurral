@@ -408,7 +408,11 @@ export class WeeklyFlowWorker {
     if (!key || !flow) {
       return { tracksQueued: 0, jobIds: [], reserveTracks: 0 };
     }
-    const primaryTracks = Array.isArray(tracks) ? tracks : [];
+    const primaryTracks = playlistSource._filterTracksByArtists(
+      Array.isArray(tracks) ? tracks : [],
+      null,
+      new Set(playlistSource._buildFeedbackExcludeKeys(flow?.ownerUserId)),
+    );
     const plan = {
       primaryTracks,
       reserveTracks: [],
