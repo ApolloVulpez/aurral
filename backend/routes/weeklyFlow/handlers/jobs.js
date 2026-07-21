@@ -19,7 +19,10 @@ import {
 import {
   commitImportToPlaylistLibrary,
 } from "../../../services/slskdOrchestrator.js";
-import { resolvePlaylistRoot } from "../../../services/playlistPaths.js";
+import {
+  buildPlaylistDestination,
+  resolvePlaylistRoot,
+} from "../../../services/playlistPaths.js";
 import {
   joinUnderRoot,
   sanitizePathPart,
@@ -172,7 +175,8 @@ export function registerJobs(router) {
     const ext = path.extname(sourcePath).toLowerCase();
     const albumDir = sanitizePathPart(job.albumName, "Unknown Album");
     const artistDir = sanitizePathPart(job.artistName, "Unknown Artist");
-    const finalDir = joinUnderRoot(playlistRoot, path.join(job.playlistType, artistDir, albumDir));
+    const destination = buildPlaylistDestination(job.playlistType, artistDir, albumDir);
+    const finalDir = joinUnderRoot(playlistRoot, destination);
     const finalName = `${sanitizePathPart(job.trackName, "Unknown Track")}${ext || ".mp3"}`;
     const finalPath = path.join(finalDir, finalName);
     try {

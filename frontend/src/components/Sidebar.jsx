@@ -152,7 +152,7 @@ function Sidebar({ mode, width = 208 }) {
         section: "activity",
         subnav: ACTIVITY_VIEWS,
       },
-      { path: "/blocklist", label: "Blocked Artists", icon: Ban },
+      { path: "/blocklist", label: "Blocklist", icon: Ban },
     ];
     return items.filter(
       (item) =>

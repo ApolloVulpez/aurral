@@ -39,11 +39,11 @@ test("blocklist suggestions combine and deduplicate unified artist results", () 
   ]);
 });
 
-test("Blocked Artists appears after Activity in the sidebar", async () => {
+test("Blocklist appears after Activity in the sidebar", async () => {
   const source = await readFile(
     new URL("../../frontend/src/components/Sidebar.jsx", import.meta.url),
     "utf8",
   );
 
-  assert.ok(source.indexOf('label: "Activity"') < source.indexOf('label: "Blocked Artists"'));
+  assert.ok(source.indexOf('label: "Activity"') < source.indexOf('label: "Blocklist"'));
 });
