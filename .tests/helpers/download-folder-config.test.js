@@ -17,6 +17,38 @@ test("resolveEnvDownloadFolder prefers DOWNLOAD_FOLDER", async () => {
   else process.env.DOWNLOAD_FOLDER = previous;
 });
 
+test("default download folder stays inside the writable Aurral data directory", async () => {
+  const previousDataDir = process.env.AURRAL_DATA_DIR;
+  const previousDownloadFolder = process.env.DOWNLOAD_FOLDER;
+  const previousPlaylistFolder = process.env.PLAYLIST_FOLDER;
+  const previousWeeklyFlowFolder = process.env.WEEKLY_FLOW_FOLDER;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aurral-download-default-"));
+  process.env.AURRAL_DATA_DIR = tempDir;
+  delete process.env.DOWNLOAD_FOLDER;
+  delete process.env.PLAYLIST_FOLDER;
+  delete process.env.WEEKLY_FLOW_FOLDER;
+
+  try {
+    const { resolveDefaultPlaylistDownloadRoot } = await import(
+      "../../backend/services/downloadFolderConfig.js"
+    );
+    assert.equal(
+      resolveDefaultPlaylistDownloadRoot(),
+      path.join(tempDir, "downloads", "aurral"),
+    );
+  } finally {
+    if (previousDataDir === undefined) delete process.env.AURRAL_DATA_DIR;
+    else process.env.AURRAL_DATA_DIR = previousDataDir;
+    if (previousDownloadFolder === undefined) delete process.env.DOWNLOAD_FOLDER;
+    else process.env.DOWNLOAD_FOLDER = previousDownloadFolder;
+    if (previousPlaylistFolder === undefined) delete process.env.PLAYLIST_FOLDER;
+    else process.env.PLAYLIST_FOLDER = previousPlaylistFolder;
+    if (previousWeeklyFlowFolder === undefined) delete process.env.WEEKLY_FLOW_FOLDER;
+    else process.env.WEEKLY_FLOW_FOLDER = previousWeeklyFlowFolder;
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("resolvePlaylistRoot prefers stored download folder path", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aurral-download-db-"));
   const previous = process.env.DOWNLOAD_FOLDER;

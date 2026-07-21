@@ -3,17 +3,20 @@ import { getDiscoveryCache } from "../discovery/index.js";
 import { normalizeWeightMap } from "./weeklyFlowPlaylistConfig.js";
 import { getBlockedArtistKeys } from "../discovery/feedback.js";
 import { mapWithConcurrency } from "../discovery/helpers.js";
+import BoundedMap from "../boundedMap.js";
 const LASTFM_HARVEST_CONCURRENCY = 12;
 const ARTIST_TOP_TRACKS_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const LIBRARY_OWNERSHIP_CACHE_TTL_MS = 10 * 60 * 1000;
 const LIBRARY_ARTIST_KEYS_CACHE_TTL_MS = 10 * 60 * 1000;
+const PROVIDER_CACHE_MAX = 1000;
+const RELATED_ARTIST_CACHE_MAX = 100;
 
 export class WeeklyFlowPlaylistSource {
   constructor() {
-    this.artistTopTagsCache = new Map();
-    this.relatedArtistMatchCache = new Map();
-    this.artistTopTracksCache = new Map();
-    this.libraryOwnershipCache = new Map();
+    this.artistTopTagsCache = new BoundedMap(PROVIDER_CACHE_MAX);
+    this.relatedArtistMatchCache = new BoundedMap(RELATED_ARTIST_CACHE_MAX);
+    this.artistTopTracksCache = new BoundedMap(PROVIDER_CACHE_MAX);
+    this.libraryOwnershipCache = new BoundedMap(PROVIDER_CACHE_MAX);
     this.libraryArtistKeysCache = null;
     this.libraryAlbumMbidCache = null;
   }

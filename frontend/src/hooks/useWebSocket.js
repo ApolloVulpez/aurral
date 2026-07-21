@@ -26,10 +26,14 @@ const OPEN = WebSocket.OPEN;
 const CONNECTING = WebSocket.CONNECTING;
 const CLOSING = WebSocket.CLOSING;
 const CLOSE_DELAY_MS = 1000;
+const HEARTBEAT_INTERVAL_MS = 30000;
+const HEARTBEAT_TIMEOUT_MS = 10000;
 
 let socket = null;
 let reconnectTimer = null;
 let closeTimer = null;
+let heartbeatInterval = null;
+let heartbeatTimeout = null;
 let reconnectAttempts = 0;
 let shouldReconnect = false;
 let closeWhenPossible = false;
@@ -72,6 +76,21 @@ const clearCloseTimer = () => {
   }
 };
 
+const clearHeartbeatTimeout = () => {
+  if (heartbeatTimeout) {
+    clearTimeout(heartbeatTimeout);
+    heartbeatTimeout = null;
+  }
+};
+
+const clearHeartbeat = () => {
+  clearHeartbeatTimeout();
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+};
+
 const sendSubscriptionUpdate = (type, channels) => {
   if (!channels.length || socket?.readyState !== OPEN) return;
   try {
@@ -93,6 +112,43 @@ const scheduleReconnect = () => {
   }, delay);
 };
 
+const retireSocket = (currentSocket) => {
+  if (socket !== currentSocket) return;
+  socket = null;
+  clearHeartbeat();
+  notifyConnectionState(false);
+  try {
+    currentSocket.close(4000, "Heartbeat timeout");
+  } catch {}
+  if (shouldReconnect && hasActiveListeners()) {
+    scheduleReconnect();
+  }
+};
+
+const sendHeartbeat = (currentSocket) => {
+  if (socket !== currentSocket || currentSocket.readyState !== OPEN) return false;
+  clearHeartbeatTimeout();
+  try {
+    currentSocket.send(JSON.stringify({ type: "ping", timestamp: Date.now() }));
+  } catch {
+    retireSocket(currentSocket);
+    return false;
+  }
+  heartbeatTimeout = setTimeout(() => {
+    heartbeatTimeout = null;
+    retireSocket(currentSocket);
+  }, HEARTBEAT_TIMEOUT_MS);
+  return true;
+};
+
+const startHeartbeat = (currentSocket) => {
+  clearHeartbeat();
+  if (!sendHeartbeat(currentSocket)) return;
+  heartbeatInterval = setInterval(() => {
+    sendHeartbeat(currentSocket);
+  }, HEARTBEAT_INTERVAL_MS);
+};
+
 function connectSocket() {
   clearReconnectTimer();
   clearCloseTimer();
@@ -109,12 +165,28 @@ function connectSocket() {
   }
 
   closeWhenPossible = false;
-  socket = new WebSocket(getWsUrl());
+  let currentSocket;
+  try {
+    currentSocket = new WebSocket(getWsUrl());
+  } catch {
+    socket = null;
+    notifyConnectionState(false);
+    scheduleReconnect();
+    return;
+  }
+  socket = currentSocket;
 
-  socket.onopen = () => {
+  currentSocket.onopen = () => {
+    if (socket !== currentSocket) {
+      try {
+        currentSocket.close();
+      } catch {}
+      return;
+    }
     reconnectAttempts = 0;
     notifyConnectionState(true);
     syncSubscriptions();
+    startHeartbeat(currentSocket);
 
     if (closeWhenPossible && !hasActiveListeners()) {
       try {
@@ -123,9 +195,14 @@ function connectSocket() {
     }
   };
 
-  socket.onmessage = (event) => {
+  currentSocket.onmessage = (event) => {
+    if (socket !== currentSocket) return;
     try {
       const msg = JSON.parse(event.data);
+      if (msg.type === "pong") {
+        clearHeartbeatTimeout();
+        return;
+      }
       const listeners = channelListeners.get(msg.channel);
       if (!listeners?.size || !msg.type) return;
       for (const listener of listeners) {
@@ -134,11 +211,14 @@ function connectSocket() {
     } catch {}
   };
 
-  socket.onerror = () => {
+  currentSocket.onerror = () => {
+    if (socket !== currentSocket) return;
     notifyConnectionState(false);
   };
 
-  socket.onclose = (event) => {
+  currentSocket.onclose = (event) => {
+    if (socket !== currentSocket) return;
+    clearHeartbeat();
     notifyConnectionState(false);
     socket = null;
     const isRecoveringProxyAuth = recoverProxyAuthFromWebSocketClose(event);
@@ -153,6 +233,7 @@ const scheduleCloseIfIdle = () => {
   if (hasActiveListeners()) return;
 
   shouldReconnect = false;
+  clearHeartbeat();
   closeTimer = setTimeout(() => {
     if (hasActiveListeners()) return;
     clearReconnectTimer();
@@ -213,6 +294,12 @@ const subscribeToStatus = (listener) => {
     statusListeners.delete(listener);
     scheduleCloseIfIdle();
   };
+};
+
+export const webSocketConnectionForTesting = {
+  sendHeartbeat: () => (socket ? sendHeartbeat(socket) : false),
+  subscribeToChannel,
+  subscribeToStatus,
 };
 
 export function useWebSocketChannel(channel, onMessage, options = {}) {

@@ -47,3 +47,19 @@ test("queue registry survives a Honker database close and reopen", () => {
   assert.equal(queue?.name, "system-task");
   assert.equal(queue?.maxAttempts, 3);
 });
+
+test("Honker uses a low-CPU watcher cadence by default", () => {
+  const original = process.env.AURRAL_HONKER_WATCHER_POLL_MS;
+  delete process.env.AURRAL_HONKER_WATCHER_POLL_MS;
+  try {
+    assert.deepEqual(honkerDb.getHonkerOpenOptions(), {
+      watcherPollIntervalMs: 25,
+    });
+  } finally {
+    if (original === undefined) {
+      delete process.env.AURRAL_HONKER_WATCHER_POLL_MS;
+    } else {
+      process.env.AURRAL_HONKER_WATCHER_POLL_MS = original;
+    }
+  }
+});

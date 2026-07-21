@@ -23,6 +23,7 @@ import ReloadPrompt from "./components/ReloadPrompt";
 import UpdateBanner from "./components/UpdateBanner";
 import { useWebSocketChannel } from "./hooks/useWebSocket";
 import { buildActivityPath, DEFAULT_ACTIVITY_VIEW } from "./navigation/activityNavConfig";
+import { getBootstrapPollIntervalMs } from "./utils/requestScheduling.js";
 
 function LegacyHistoryRedirect() {
   return <Navigate to="/activity/history" replace />;
@@ -113,7 +114,7 @@ function AppContent() {
 
   const RELOAD_COOLDOWN_MS = 10000;
 
-  useWebSocketChannel("discovery", (msg) => {
+  const { isConnected: appSocketConnected } = useWebSocketChannel("discovery", (msg) => {
     if (msg.type !== "discovery_update") return;
 
     const hasPendingManualRefresh = localStorage.getItem(DISCOVERY_MANUAL_REFRESH_KEY) === "1";
@@ -184,18 +185,26 @@ function AppContent() {
     };
 
     checkApiHealth();
-    const interval = setInterval(checkApiHealth, 30000);
+    const interval = setInterval(
+      checkApiHealth,
+      getBootstrapPollIntervalMs({ isConnected: appSocketConnected }),
+    );
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         checkApiHealth();
       }
     };
+    const handleFocus = () => {
+      checkApiHealth();
+    };
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleFocus);
     return () => {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleFocus);
     };
-  }, [isAuthenticated, refreshAuth]);
+  }, [appSocketConnected, isAuthenticated, refreshAuth]);
 
   useEffect(() => {
     if (isHealthy === null) return;

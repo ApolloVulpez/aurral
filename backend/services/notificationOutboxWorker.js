@@ -40,12 +40,13 @@ export function startNotificationOutboxWorker() {
   running = true;
   stopRequested = false;
   _loopPromise = runLoop();
+  return _loopPromise;
 }
 
 export function stopNotificationOutboxWorker() {
   stopRequested = true;
-  running = false;
   abortController?.abort();
+  return _loopPromise || Promise.resolve();
 }
 
 export function isNotificationOutboxWorkerRunning() {

@@ -9,6 +9,7 @@
     "start": "node --env-file=.env server.js",
     "dev": "node --watch --env-file=.env server.js",
     "test": "cd .. && npm test",
+    "postinstall": "node scripts/patchHonkerAbortListener.js",
     "auth:reset-admin-password": "node --env-file=.env scripts/resetAdminPassword.js"
   },
   "keywords": [

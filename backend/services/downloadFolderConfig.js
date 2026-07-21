@@ -35,7 +35,7 @@ export function resolveDefaultPlaylistDownloadRoot() {
   if (fs.existsSync("/data")) {
     return "/data/downloads/aurral";
   }
-  return path.join(path.resolve(resolveAurralDataDir(), "..", "downloads"), "aurral");
+  return path.join(resolveAurralDataDir(), "downloads", "aurral");
 }
 
 export function getSuggestedDownloadFolderPath() {

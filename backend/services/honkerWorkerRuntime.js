@@ -170,22 +170,42 @@ export async function shutdownHonkerInfrastructure({ timeoutMs = 30000 } = {}) {
   }
   restartTimers.clear();
 
+  let schedulerStop = Promise.resolve();
   try {
     const { stopHonkerScheduler } = await import("./honkerDb.js");
-    stopHonkerScheduler();
+    schedulerStop = Promise.resolve(stopHonkerScheduler());
   } catch {}
 
+  const workerStops = [];
   for (const [, entry] of workers) {
     try {
-      entry.stop?.();
+      workerStops.push(Promise.resolve(entry.stop?.()));
     } catch {}
   }
 
   const deadline = Date.now() + Math.max(0, Number(timeoutMs) || 0);
+  const stopPromises = Promise.allSettled([schedulerStop, ...workerStops]);
+  const remainingMs = Math.max(0, deadline - Date.now());
+  if (remainingMs > 0) {
+    await Promise.race([
+      stopPromises,
+      new Promise((resolve) => setTimeout(resolve, remainingMs)),
+    ]);
+  }
+
   while (Date.now() < deadline) {
     const anyRunning = [...workers.values()].some((entry) => entry.isRunning?.());
     if (!anyRunning) break;
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, Math.min(50, deadline - Date.now())));
+  }
+
+  const stillRunning = [...workers.entries()]
+    .filter(([, entry]) => entry.isRunning?.())
+    .map(([name]) => name);
+  if (stillRunning.length > 0) {
+    console.warn(
+      `[honkerRuntime] shutdown timed out waiting for workers: ${stillRunning.join(", ")}`,
+    );
   }
 
   for (const handler of shutdownHandlers) {

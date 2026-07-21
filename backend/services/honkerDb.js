@@ -29,7 +29,17 @@ let openedHonkerDbPath = null;
 let notificationOutbox = null;
 let honkerSchedulerStarted = false;
 let honkerSchedulerAbort = null;
+let honkerSchedulerPromise = null;
 const WORKER_ID = `aurral-${process.pid}`;
+const DEFAULT_HONKER_WATCHER_POLL_MS = 25;
+
+export function getHonkerOpenOptions() {
+  const configured = Number(process.env.AURRAL_HONKER_WATCHER_POLL_MS);
+  const watcherPollIntervalMs = Number.isFinite(configured) && configured > 0
+    ? Math.min(1000, Math.max(1, Math.floor(configured)))
+    : DEFAULT_HONKER_WATCHER_POLL_MS;
+  return { watcherPollIntervalMs };
+}
 
 export const SCHEDULED_SYSTEM_TASKS = [
   {
@@ -92,7 +102,7 @@ export function getHonkerDb() {
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true });
     }
-    honkerDb = honker.open(dbPath);
+    honkerDb = honker.open(dbPath, getHonkerOpenOptions());
     openedHonkerDbPath = dbPath;
   }
   return honkerDb;
@@ -364,23 +374,31 @@ export function startHonkerScheduler() {
   honkerSchedulerStarted = true;
   const abort = new AbortController();
   honkerSchedulerAbort = abort;
-  getHonkerDb()
+  const runPromise = getHonkerDb()
     .scheduler()
-    .run(WORKER_ID, abort.signal)
+    .run(WORKER_ID, abort.signal);
+  honkerSchedulerPromise = runPromise;
+  void runPromise
     .catch(async (error) => {
       console.error("[honkerScheduler] loop error:", error);
       honkerSchedulerStarted = false;
       honkerSchedulerAbort = null;
       const { scheduleHonkerComponentRestart } = await import("./honkerWorkerRuntime.js");
       scheduleHonkerComponentRestart("scheduler", startHonkerScheduler);
+    })
+    .finally(() => {
+      if (honkerSchedulerPromise === runPromise) {
+        honkerSchedulerPromise = null;
+      }
     });
 }
 
 export function stopHonkerScheduler() {
-  if (!honkerSchedulerAbort) return;
-  honkerSchedulerAbort.abort();
+  const running = honkerSchedulerPromise;
+  honkerSchedulerAbort?.abort();
   honkerSchedulerAbort = null;
   honkerSchedulerStarted = false;
+  return running || Promise.resolve();
 }
 
 export function closeHonkerDb() {

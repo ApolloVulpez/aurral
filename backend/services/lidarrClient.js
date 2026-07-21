@@ -3,6 +3,7 @@ import http from "http";
 import https from "https";
 import { dbOps } from "../db/helpers/index.js";
 import { logger } from "./logger.js";
+import BoundedMap from "./boundedMap.js";
 
 const CIRCUIT_COOLDOWN_MS = 60000;
 const CIRCUIT_FAILURE_THRESHOLD = 3;
@@ -13,6 +14,8 @@ const LIDARR_RETRY_ATTEMPTS = 2;
 const LIDARR_RETRY_DELAY_MS = 800;
 const LIDARR_STATUS_CACHE_MS = 10000;
 const LIDARR_ARTIST_INDEX_TTL_MS = 15 * 60 * 1000;
+const LIDARR_ARTIST_INDEX_CACHE_MAX = 5000;
+const LIDARR_STATUS_CACHE_MAX = 100;
 const VALID_MONITOR_OPTIONS = new Set([
   "none",
   "existing",
@@ -128,14 +131,15 @@ export class LidarrClient {
     this._circuitOpenedAt = 0;
     this._circuitFailures = 0;
     this._lastCircuitFailureAt = 0;
+    this._circuitProbe = null;
     this._concurrent = 0;
     this._waitQueue = [];
     this._artistListCache = null;
-    this._artistByMbidCache = new Map();
+    this._artistByMbidCache = new BoundedMap(LIDARR_ARTIST_INDEX_CACHE_MAX);
     this._artistByMbidInflight = new Map();
-    this._albumCache = new Map();
+    this._albumCache = new BoundedMap(LIDARR_ARTIST_ALBUM_CACHE_MAX);
     this._albumMbidIndex = null;
-    this._statusCache = new Map();
+    this._statusCache = new BoundedMap(LIDARR_STATUS_CACHE_MAX);
     this._inflightGets = new Map();
     this._httpAgent = new http.Agent({
       keepAlive: true,
@@ -224,9 +228,15 @@ export class LidarrClient {
     this._lastCircuitFailureAt = now;
     this._circuitFailures += 1;
     if (this._circuitFailures >= CIRCUIT_FAILURE_THRESHOLD) {
-      this._circuitOpen = true;
-      this._circuitOpenedAt = now;
+      this._openCircuit(now);
     }
+  }
+
+  _openCircuit(now = Date.now()) {
+    this._circuitFailures = Math.max(this._circuitFailures, CIRCUIT_FAILURE_THRESHOLD);
+    this._lastCircuitFailureAt = now;
+    this._circuitOpen = true;
+    this._circuitOpenedAt = now;
   }
 
   _resetCircuitState() {
@@ -234,6 +244,24 @@ export class LidarrClient {
     this._lastCircuitFailureAt = 0;
     this._circuitOpen = false;
     this._circuitOpenedAt = 0;
+  }
+
+  _startCircuitProbe() {
+    if (this._circuitProbe) return this._circuitProbe;
+    const deferred = Promise.withResolvers();
+    this._circuitProbe = {
+      promise: deferred.promise,
+      resolve: deferred.resolve,
+    };
+    return this._circuitProbe;
+  }
+
+  _finishCircuitProbe(probe, recovered) {
+    if (!probe) return;
+    if (this._circuitProbe === probe) {
+      this._circuitProbe = null;
+    }
+    probe.resolve(Boolean(recovered));
   }
 
   isCircuitOpen() {
@@ -299,7 +327,7 @@ export class LidarrClient {
     if (didConfigChange) {
       this._artistListCache = null;
       this._invalidateArtistIndexes();
-      this._albumCache = new Map();
+      this._albumCache = new BoundedMap(LIDARR_ARTIST_ALBUM_CACHE_MAX);
       this._statusCache.clear();
     }
   }
@@ -388,13 +416,23 @@ export class LidarrClient {
     }
 
     const bypassCircuit = options?.bypassCircuit === true;
+    let circuitProbe = null;
     if (!this.config.circuitDisabled && this._circuitOpen && !bypassCircuit) {
       if (now - this._circuitOpenedAt < CIRCUIT_COOLDOWN_MS) {
         const stale = this._staleGetCache(method, endpoint);
         if (stale !== null) return stale;
         throw new Error("Lidarr unavailable (circuit open). Will retry after cooldown.");
       }
-      this._resetCircuitState();
+      if (this._circuitProbe) {
+        const stale = this._staleGetCache(method, endpoint);
+        if (stale !== null) return stale;
+        const recovered = await this._circuitProbe.promise;
+        if (!recovered) {
+          throw new Error("Lidarr unavailable (recovery probe failed). Will retry after cooldown.");
+        }
+      } else {
+        circuitProbe = this._startCircuitProbe();
+      }
     }
     if (this.config.circuitDisabled && this._circuitOpen) {
       this._resetCircuitState();
@@ -411,7 +449,7 @@ export class LidarrClient {
     ) {
       this._artistListCache = null;
       this._invalidateArtistIndexes();
-      this._albumCache = new Map();
+      this._albumCache = new BoundedMap(LIDARR_ARTIST_ALBUM_CACHE_MAX);
       this._albumMbidIndex = null;
     }
     if (method !== "GET" && endpoint.startsWith("/command")) {
@@ -479,6 +517,7 @@ export class LidarrClient {
           }
 
           this._resetCircuitState();
+          this._finishCircuitProbe(circuitProbe, true);
           return response.data;
         } finally {
           this._releaseSlot();
@@ -496,9 +535,18 @@ export class LidarrClient {
           continue;
         }
 
-        if (!this.config.circuitDisabled && (isNoResponse || isTransientStatus)) {
-          this._registerCircuitFailure();
+        const transientFailure = isNoResponse || isTransientStatus;
+        if (!this.config.circuitDisabled && transientFailure) {
+          if (circuitProbe) {
+            this._openCircuit();
+          } else {
+            this._registerCircuitFailure();
+          }
         }
+        if (circuitProbe && !transientFailure) {
+          this._resetCircuitState();
+        }
+        this._finishCircuitProbe(circuitProbe, !transientFailure);
 
         if (error.response) {
           const statusText = error.response.statusText;
