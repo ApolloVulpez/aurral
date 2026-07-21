@@ -4918,26 +4918,8 @@ textarea {
 }
 
 .artist-discover-shelf-card {
-  width: 148px;
+  width: clamp(148px, 12vw, 220px);
   flex-shrink: 0;
-}
-
-@media (min-width: 640px) {
-  .artist-discover-shelf-card {
-    width: calc((100% - 1rem * 2) / 3);
-  }
-}
-
-@media (min-width: 768px) {
-  .artist-discover-shelf-card {
-    width: calc((100% - 1rem * 3) / 4);
-  }
-}
-
-@media (min-width: 1024px) {
-  .artist-discover-shelf-card {
-    width: calc((100% - 1rem * 5) / 6);
-  }
 }
 
 .artist-discover-show-rail-card {
