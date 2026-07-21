@@ -1,60 +1,48 @@
-name: Stable Release
+name: Deploy Prerelease
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: Version to publish (must match the root package.json, for example 2.0.0)
-        required: true
-        type: string
+  push:
+    branches: ["dev", "test"]
 
 permissions:
   contents: read
 
 concurrency:
-  group: stable-release
-  cancel-in-progress: false
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate:
     uses: ./.github/workflows/validate.yml
 
-  guard-main:
+  guard-head:
     needs: validate
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
     permissions:
       contents: read
+    outputs:
+      is_current_head: ${{ steps.guard.outputs.is_current_head }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
-      - name: Verify main and requested version
-        env:
-          REQUESTED_VERSION: ${{ inputs.version }}
+      - name: Verify workflow commit is current branch head
+        id: guard
         run: |
-          if [ "${GITHUB_REF_NAME}" != "main" ]; then
-            echo "Stable releases must be run from main, not ${GITHUB_REF_NAME}."
-            exit 1
+          git fetch origin "+${GITHUB_REF_NAME}:refs/remotes/origin/${GITHUB_REF_NAME}" --depth=1
+          REMOTE_SHA="$(git rev-parse "origin/${GITHUB_REF_NAME}")"
+          if [ "${REMOTE_SHA}" = "${GITHUB_SHA}" ]; then
+            echo "is_current_head=true" >> "${GITHUB_OUTPUT}"
+            exit 0
           fi
-
-          PACKAGE_VERSION="$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")"
-          NORMALIZED_REQUESTED_VERSION="${REQUESTED_VERSION#v}"
-          if [ "${NORMALIZED_REQUESTED_VERSION}" != "${PACKAGE_VERSION}" ]; then
-            echo "Requested version ${NORMALIZED_REQUESTED_VERSION} does not match package.json ${PACKAGE_VERSION}."
-            exit 1
-          fi
-
-          git fetch origin "+main:refs/remotes/origin/main" --depth=1
-          REMOTE_SHA="$(git rev-parse origin/main)"
-          if [ "${REMOTE_SHA}" != "${GITHUB_SHA}" ]; then
-            echo "Workflow commit ${GITHUB_SHA} is not current origin/main ${REMOTE_SHA}."
-            exit 1
-          fi
+          echo "Workflow run is stale for ${GITHUB_REF_NAME}: head=${REMOTE_SHA} run=${GITHUB_SHA}"
+          echo "is_current_head=false" >> "${GITHUB_OUTPUT}"
 
   compute-release:
-    needs: guard-main
+    needs: guard-head
+    if: needs.guard-head.outputs.is_current_head == 'true'
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
     permissions:
@@ -63,8 +51,6 @@ jobs:
       tag: ${{ steps.release.outputs.tag }}
       version: ${{ steps.release.outputs.version }}
       channel: ${{ steps.release.outputs.channel }}
-      major: ${{ steps.release.outputs.major }}
-      minor: ${{ steps.release.outputs.minor }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -74,7 +60,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Compute stable release
+      - name: Compute prerelease version
         id: release
         run: |
           git fetch --force --tags
@@ -82,13 +68,11 @@ jobs:
           TAGS="$(git tag --list | tr '\n' ',')"
           HEAD_TAGS="$(git tag --points-at HEAD | tr '\n' ',')"
           node scripts/resolve-next-release.js \
-            --branch main \
+            --branch "${GITHUB_REF_NAME}" \
             --target-version "${PACKAGE_VERSION}" \
             --tags "${TAGS}" \
             --head-tags "${HEAD_TAGS}" \
             --github-output true
-          echo "major=${PACKAGE_VERSION%%.*}" >> "${GITHUB_OUTPUT}"
-          echo "minor=${PACKAGE_VERSION%.*}" >> "${GITHUB_OUTPUT}"
 
   publish-image:
     needs: compute-release
@@ -119,14 +103,12 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=raw,value=${{ needs.compute-release.outputs.version }}
-            type=raw,value=${{ needs.compute-release.outputs.minor }}
-            type=raw,value=${{ needs.compute-release.outputs.major }}
-            type=raw,value=latest
+            type=raw,value=${{ needs.compute-release.outputs.channel }}
 
       - name: Prepare local BuildKit cache
         run: mkdir -p /home/github-runner/.cache/aurral-buildkit
 
-      - name: Build and push stable image
+      - name: Build and push prerelease image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
@@ -139,7 +121,7 @@ jobs:
           build-args: |
             APP_VERSION=${{ needs.compute-release.outputs.version }}
             GITHUB_REPO=${{ github.repository }}
-            RELEASE_CHANNEL=stable
+            RELEASE_CHANNEL=${{ needs.compute-release.outputs.channel }}
           cache-from: type=local,src=/home/github-runner/.cache/aurral-buildkit
           cache-to: type=local,dest=/home/github-runner/.cache/aurral-buildkit-new,mode=max
 
@@ -160,7 +142,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Create or confirm annotated release tag
+      - name: Create or confirm annotated prerelease tag
         env:
           RELEASE_TAG: ${{ needs.compute-release.outputs.tag }}
         run: |
@@ -178,38 +160,3 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "${RELEASE_TAG}" "${GITHUB_SHA}" -m "Aurral ${RELEASE_TAG}"
           git push origin "refs/tags/${RELEASE_TAG}"
-
-  publish-github-release:
-    needs: [compute-release, create-tag]
-    runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-
-      - name: Publish GitHub release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ needs.compute-release.outputs.tag }}
-          RELEASE_VERSION: ${{ needs.compute-release.outputs.version }}
-        run: |
-          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            echo "GitHub release ${RELEASE_TAG} already exists."
-            exit 0
-          fi
-
-          NOTES_FILE="release-notes/${RELEASE_VERSION}.md"
-          if [ -f "${NOTES_FILE}" ]; then
-            gh release create "${RELEASE_TAG}" \
-              --verify-tag \
-              --title "Aurral ${RELEASE_TAG}" \
-              --notes-file "${NOTES_FILE}" \
-              --latest
-          else
-            gh release create "${RELEASE_TAG}" \
-              --verify-tag \
-              --title "Aurral ${RELEASE_TAG}" \
-              --generate-notes \
-              --latest
-          fi

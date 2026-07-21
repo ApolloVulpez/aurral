@@ -1,0 +1,22 @@
+changelog:
+  exclude:
+    labels:
+      - released
+      - "released on @test"
+      - skip-changelog
+  categories:
+    - title: Features
+      labels:
+        - enhancement
+    - title: Bug fixes
+      labels:
+        - bug
+    - title: Dependencies
+      labels:
+        - dependencies
+    - title: Documentation
+      labels:
+        - documentation
+    - title: Other changes
+      labels:
+        - "*"

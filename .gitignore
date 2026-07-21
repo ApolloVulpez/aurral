@@ -15,7 +15,13 @@ frontend/node_modules
 frontend/dist
 data/
 data.bk/
+data.backup/
 dumps/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
 backend/data/db.json
 backend/data/*
 !backend/data/.gitkeep

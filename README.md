@@ -8,7 +8,7 @@
 [![Downloads](https://img.shields.io/badge/dynamic/json?url=https://ghcr-badge.elias.eu.org/api/lklynet/aurral/aurral&query=downloadCount&label=downloads&logo=docker&color=2496ed)](https://github.com/lklynet/aurral/pkgs/container/aurral)
 ![GitHub Release](https://img.shields.io/github/v/release/lklynet/aurral)
 ![GitHub License](https://img.shields.io/github/license/lklynet/aurral)
-[![Build](https://img.shields.io/github/actions/workflow/status/lklynet/aurral/release.yml?branch=main)](https://github.com/lklynet/aurral/actions/workflows/release.yml)
+[![Build](https://img.shields.io/github/actions/workflow/status/lklynet/aurral/ci.yml?label=build)](https://github.com/lklynet/aurral/actions/workflows/ci.yml)
 ![Discord](https://img.shields.io/discord/1457052417580339285?style=flat)
 [![Sponsor](https://img.shields.io/github/sponsors/lklynet?label=Sponsor&logo=GitHub-Sponsors&logoColor=fe8a76)](https://github.com/sponsors/lklynet/)
 
@@ -88,7 +88,7 @@ docker compose up -d
 
 The `latest` tag follows stable Aurral releases. For a reproducible deployment,
 replace it with an exact published version tag, such as
-`ghcr.io/lklynet/aurral:1.76.51`.
+`ghcr.io/lklynet/aurral:2.0.0`.
 
 Open `http://localhost:3001`, create your admin account, and connect Lidarr.
 

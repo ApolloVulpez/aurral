@@ -49,20 +49,20 @@ test("parseReleaseVersion identifies dev channel tags", () => {
 
 test("selectLatestReleaseForChannel separates stable, test, and dev tags", () => {
   const refs = [
-    { ref: "refs/tags/v1.50.0" },
-    { ref: "refs/tags/v1.51.0-test.1" },
-    { ref: "refs/tags/v1.51.0-dev.2" },
+    { ref: "refs/tags/v2.0.0" },
+    { ref: "refs/tags/v2.1.0-test.1" },
+    { ref: "refs/tags/v2.1.0-dev.2" },
     { ref: "refs/tags/v1.50.0-test.1" },
     { ref: "refs/tags/v1.49.0" },
   ];
 
-  assert.equal(selectLatestReleaseForChannel(refs, "stable")?.tagName, "v1.50.0");
+  assert.equal(selectLatestReleaseForChannel(refs, "stable")?.tagName, "v2.0.0");
   assert.equal(
     selectLatestReleaseForChannel(refs, "test")?.tagName,
-    "v1.51.0-test.1",
+    "v2.1.0-test.1",
   );
   assert.equal(
     selectLatestReleaseForChannel(refs, "dev")?.tagName,
-    "v1.51.0-dev.2",
+    "v2.1.0-dev.2",
   );
 });
