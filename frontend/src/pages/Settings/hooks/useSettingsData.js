@@ -322,9 +322,11 @@ export function useSettingsData(showSuccess, showError, showInfo) {
         setHasUnsavedChanges(false);
         showSuccess("Settings saved successfully!");
         await refreshHealth();
+        return true;
       } catch (err) {
         await fetchSettings();
         showError("Failed to save settings: " + err.message);
+        return false;
       } finally {
         setSaving(false);
       }

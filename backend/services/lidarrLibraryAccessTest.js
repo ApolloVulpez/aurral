@@ -8,8 +8,6 @@ import {
   looksLikeExternalOnlyPath,
   resolveLocalPath,
 } from "./pathMappings.js";
-import { pathsShareDevice } from "./weeklyFlow/weeklyFlowFileReuse.js";
-import { resolvePlaylistRoot as resolveWeeklyFlowRoot } from "./playlistPaths.js";
 function step(id, status, label, extra = {}) {
   return { id, status, label, ...extra };
 }
@@ -103,8 +101,7 @@ export async function findSampleTrackFile(lidarrClient) {
   return null;
 }
 
-export async function runLidarrLibraryAccessTest(lidarrClient, options = {}) {
-  const shareDevice = options.pathsShareDevice || pathsShareDevice;
+export async function runLidarrLibraryAccessTest(lidarrClient) {
   const steps = [];
 
   const connection = await lidarrClient.testConnection(true);
@@ -240,24 +237,6 @@ export async function runLidarrLibraryAccessTest(lidarrClient, options = {}) {
     );
   }
 
-  const flowLibraryRoot = resolveWeeklyFlowRoot();
-  const sharedFilesystem = await shareDevice(resolvedSamplePath || sample.path, flowLibraryRoot);
-  if (sharedFilesystem) {
-    steps.push(
-      step("hardlink", "pass", "Lidarr and Aurral downloads share a filesystem", {
-        detail:
-          "File moves stay on one filesystem. Navidrome still needs to scan every folder referenced by generated playlist files.",
-      }),
-    );
-  } else {
-    steps.push(
-      step("hardlink", "warn", "Lidarr and Aurral downloads are on different filesystems", {
-        detail: `Lidarr files are under ${resolvedSamplePath || sample.path}, but Aurral writes downloads under ${flowLibraryRoot}.`,
-        fix: "Mount the same shared root into Aurral, slskd, and Navidrome, then choose that shared downloads path in Settings (for example /data/downloads/aurral).",
-      }),
-    );
-  }
-
   steps.push(
     step("ready", "pass", "Ready for library playback and playlist reuse", {
       detail: `${sample.artistName} — ${sample.trackTitle}`,
@@ -271,6 +250,6 @@ export async function runLidarrLibraryAccessTest(lidarrClient, options = {}) {
       ...sample,
       path: resolvedSamplePath || sample.path,
     },
-    partial: !sharedFilesystem,
+    partial: steps.some((entry) => entry.status === "warn"),
   };
 }

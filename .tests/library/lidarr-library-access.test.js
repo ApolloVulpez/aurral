@@ -87,10 +87,6 @@ test("runLidarrLibraryAccessTest passes when a track file is readable", async ()
   assert.equal(result.partial, false);
   assert.equal(result.sample?.path, trackPath);
   assert.equal(
-    result.steps.some((step) => step.id === "hardlink" && step.status === "pass"),
-    true,
-  );
-  assert.equal(
     result.steps.some((step) => step.id === "ready" && step.status === "pass"),
     true,
   );
@@ -123,7 +119,7 @@ test("runLidarrLibraryAccessTest shows translated root path when manual Lidarr m
   assert.match(mountStep?.detail || "", / -> /);
 });
 
-test("runLidarrLibraryAccessTest warns when flow and Lidarr files are on different filesystems", async () => {
+test("runLidarrLibraryAccessTest omits unrelated filesystem placement checks", async () => {
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "aurral-lidarr-test-"));
   const albumDir = path.join(rootDir, "Artist", "Album");
   const trackPath = path.join(albumDir, "Artist_Album_01_Track.mp3");
@@ -164,17 +160,18 @@ test("runLidarrLibraryAccessTest warns when flow and Lidarr files are on differe
         },
       ],
     }),
-    {
-      pathsShareDevice: async () => false,
-    },
   );
 
   await fs.rm(rootDir, { recursive: true, force: true });
 
   assert.equal(result.ok, true);
-  assert.equal(result.partial, true);
+  assert.equal(result.partial, false);
   assert.equal(
-    result.steps.some((step) => step.id === "hardlink" && step.status === "warn"),
+    result.steps.some((step) => step.id === "hardlink"),
+    false,
+  );
+  assert.equal(
+    result.steps.some((step) => step.id === "ready" && step.status === "pass"),
     true,
   );
 });

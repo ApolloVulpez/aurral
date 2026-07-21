@@ -7,6 +7,7 @@ import {
   subscribeStorageHealth,
 } from "../../../hooks/useStorageHealth";
 import { SettingsArrFieldSet } from "./arr/SettingsArrLayout";
+import { runStorageHealthAction } from "../utils/runStorageHealthAction";
 
 function formatBytes(bytes) {
   const value = Number(bytes);
@@ -151,10 +152,13 @@ export function SettingsStorageSection({
     async ({ notify = true } = {}) => {
       setCheckingHealth(true);
       try {
-        if (hasUnsavedChanges) {
-          await handleSaveSettings();
-        }
-        const result = await refreshStorageHealth({ force: true });
+        const outcome = await runStorageHealthAction({
+          hasUnsavedChanges,
+          saveSettings: handleSaveSettings,
+          refreshStorageHealth: () => refreshStorageHealth({ force: true }),
+        });
+        if (!outcome.saved) return null;
+        const result = outcome.result;
         if (notify) {
           if (result.ok && !result.partial) {
             showSuccess("Storage checks passed");
@@ -237,9 +241,9 @@ export function SettingsStorageSection({
         }
       >
         <p className="arr-form-help">
-          Verifies Aurral, Lidarr, download clients, and Navidrome all see the same files on disk.
-          Mount one shared host folder at the same container path in every app, such as{" "}
-          <code>/mnt/user/data:/data</code>.
+          Verifies that Aurral can access configured library paths, transfer completed downloads,
+          and emit paths that playback servers can scan. Matching container paths are simplest,
+          but narrower mounts and remote path mappings are supported.
         </p>
         <StorageHealthDashboard result={healthResult} loading={checkingHealth} />
       </SettingsArrFieldSet>
