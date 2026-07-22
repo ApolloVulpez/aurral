@@ -629,6 +629,25 @@ test("PUT /library/artists/:mbid updates artist monitoring to existing albums", 
   assert.equal(payload.monitorOption, "existing");
 });
 
+test("PUT /library/artists/:mbid exposes updated monitoring on the next GET", async () => {
+  const mbid = "91919191-9191-9191-9191-919191919191";
+  await postLibraryArtist({
+    foreignArtistId: mbid,
+    artistName: "Monitoring Reload Artist",
+  });
+
+  const update = await apiFetch(`/api/library/artists/${mbid}`, {
+    method: "PUT",
+    body: JSON.stringify({ monitored: true, monitorOption: "existing" }),
+  });
+  assert.equal(update.response.status, 200, JSON.stringify(update.payload));
+  assert.equal(update.payload.monitorOption, "existing");
+
+  const reload = await apiFetch(`/api/library/artists/${mbid}`);
+  assert.equal(reload.response.status, 200, JSON.stringify(reload.payload));
+  assert.equal(reload.payload.monitorOption, "existing");
+});
+
 test("POST /library/downloads/album checks artist and monitors only the requested album", async () => {
   const artist = lidarrArtist(700, "Pick And Choose Artist", "abababab-abab-abab-abab-abababababab");
   const album = lidarrAlbum(701, artist.id, "Selected Album", "bcbcbcbc-bcbc-bcbc-bcbc-bcbcbcbcbcbc");

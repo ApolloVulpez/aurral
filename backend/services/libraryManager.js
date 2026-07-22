@@ -921,6 +921,7 @@ export class LibraryManager {
           ...(mapped.addOptions || {}),
           monitor: normalizedMonitorOption,
         };
+        upsertCachedArtist(mapped);
         return mapped;
       }
       return this.mapLidarrArtist(lidarrArtist);
