@@ -31,7 +31,7 @@ test.after(async () => {
 test("getHonkerQueueDepth counts claimable pending jobs", () => {
   honkerDb.getWeeklyFlowOperationQueue().enqueue({ kind: "noop-test" });
   const depth = honkerDb.getHonkerQueueDepth("weekly-flow-operation");
-  assert.ok(depth >= 1);
+  assert.equal(depth, 1);
 });
 
 test("getHonkerQueueNextClaimAt reports delayed queue work", () => {
@@ -47,11 +47,16 @@ test("withJobHeartbeat extends job claim while work runs", async () => {
   const job = queue.claimOne(honkerDb.getWorkerId());
   assert.equal(job?.id, jobId);
 
-  const initialExpiry = job.claimExpiresAt;
+  let heartbeatCalls = 0;
+  const heartbeat = job.heartbeat.bind(job);
+  job.heartbeat = (seconds) => {
+    heartbeatCalls += 1;
+    return heartbeat(seconds);
+  };
   await runtime.withJobHeartbeat(job, queue, async () => {
     await new Promise((resolve) => setTimeout(resolve, 1200));
-  });
-  assert.ok(job.claimExpiresAt >= initialExpiry);
+  }, 1);
+  assert.ok(heartbeatCalls >= 1);
   job.ack();
 });
 

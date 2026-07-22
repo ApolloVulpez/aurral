@@ -21,7 +21,6 @@ const bcrypt = bcryptModule.default;
 const {
   getListenHistoryProfile,
   getListenHistoryCacheNamespace,
-  getDefaultListenHistoryProfile,
   hasListenHistoryProfile,
   resolveListenHistorySettings,
 } = listeningHistoryModule;

@@ -18,8 +18,6 @@ test("single-pass refresh: buildRecommendationsFromSeeds includes candidate tag 
     buildDiscoverySeedList,
     addRecommendationCandidate,
     finalizeRecommendationAccumulator,
-    mergeResolvedRecommendations,
-    rerankRecommendations,
   } = await importFromRepo("backend/services/discovery/recommendationPipeline.js");
 
   const seeds = buildDiscoverySeedList({
@@ -180,5 +178,4 @@ test("single-pass refresh: db discovery cache stores initial quality for backwar
   assert.equal(cache.discoveryRunId, "run-initial");
   assert.equal(cache.enrichmentProgressMessage, "Improving recommendations");
 });
-
 

@@ -4,9 +4,6 @@ import { importFromRepo } from "../helpers/backendTestHarness.js";
 import { createDiscoveryArtistBatcher } from "../helpers/discoveryFixtures.js";
 
 test("per-user refresh: rerankCachedRecommendations produces a personalized slice from the global pool", async () => {
-  const { rerankRecommendations } = await importFromRepo(
-    "backend/services/discovery/recommendationPipeline.js",
-  );
   const { rerankCachedRecommendations } = await importFromRepo(
     "backend/services/discovery/index.js",
   );
@@ -100,8 +97,9 @@ test("per-user refresh: user-specific feedback is isolated from global feedback"
 });
 
 test("per-user refresh: mergeRetainedRecommendationPool preserves per-user retained pool across refreshes", async () => {
-  const { mergeRetainedRecommendationPool, rerankRecommendations } =
-    await importFromRepo("backend/services/discovery/recommendationPipeline.js");
+  const { mergeRetainedRecommendationPool } = await importFromRepo(
+    "backend/services/discovery/recommendationPipeline.js",
+  );
   const { rerankCachedRecommendations } = await importFromRepo(
     "backend/services/discovery/index.js",
   );

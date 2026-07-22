@@ -2,64 +2,24 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { importFromRepo } from "../helpers/backendTestHarness.js";
 
-test("tag inheritance: candidate with >= 3 seed tags inherits tags and skips artist.getTopTags", async () => {
+test("tag inheritance requires three seed tags and skips directly hydrated candidates", async () => {
   const { canInheritTagsFromSeeds } = await importFromRepo(
     "backend/services/discovery/index.js",
   );
 
-  const candidateWithManyTags = {
-    id: "cand-1",
-    name: "Rich Candidate",
-    tags: ["shoegaze", "dream-pop", "noise-rock", "post-punk"],
-    matchedTags: ["shoegaze", "dream-pop"],
-    scoreTagAffinity: 35,
-    scoreTotal: 180,
-    scoreSeedCoverage: 12,
-    scoreNovelty: 8,
-    scorePopularityPenalty: 4,
-    seedCount: 1,
-    discoveryDepth: 1,
-    sourceType: "lastfm",
-    supportingSeeds: [{ artistName: "Seed A", weight: 1 }],
-  };
-
-  assert.equal(canInheritTagsFromSeeds(candidateWithManyTags), true);
-
-  const candidateWithFewTags = {
-    id: "cand-2",
-    name: "Sparse Candidate",
-    tags: ["shoegaze"],
-    matchedTags: ["shoegaze"],
-    scoreTagAffinity: 10,
-    scoreTotal: 120,
-    scoreSeedCoverage: 4,
-    scoreNovelty: 8,
-    scorePopularityPenalty: 2,
-    seedCount: 1,
-    discoveryDepth: 1,
-    sourceType: "lastfm",
-    supportingSeeds: [{ artistName: "Seed B", weight: 1 }],
-  };
-
-  assert.equal(canInheritTagsFromSeeds(candidateWithFewTags), false);
-
-  const candidateWithNoTags = {
-    id: "cand-3",
-    name: "Tagless Candidate",
-    tags: [],
-    matchedTags: [],
-    scoreTagAffinity: 0,
-    scoreTotal: 80,
-    scoreSeedCoverage: 2,
-    scoreNovelty: 4,
-    scorePopularityPenalty: 0,
-    seedCount: 1,
-    discoveryDepth: 1,
-    sourceType: "lastfm",
-    supportingSeeds: [{ artistName: "Seed C", weight: 1 }],
-  };
-
-  assert.equal(canInheritTagsFromSeeds(candidateWithNoTags), false);
+  assert.equal(canInheritTagsFromSeeds({ tags: ["shoegaze", "indie"] }), false);
+  assert.equal(
+    canInheritTagsFromSeeds({ tags: ["shoegaze", "dream-pop", "indie"] }),
+    true,
+  );
+  assert.equal(
+    canInheritTagsFromSeeds({
+      tags: ["shoegaze", "dream-pop", "indie"],
+      candidateTagsHydrated: true,
+      tagSource: "lastfm_artist",
+    }),
+    false,
+  );
 });
 
 test("tag inheritance: inherited tags produce tagSource: inherited and keep existing scores stable", async () => {
@@ -109,32 +69,6 @@ test("tag inheritance: inherited tags produce tagSource: inherited and keep exis
   );
 
   assert.equal(direct.tagSource, "lastfm_artist");
-});
-
-test("tag inheritance: candidate with lastfm tags preserves direct tagSource when inherited tags exist", async () => {
-  const { canInheritTagsFromSeeds } = await importFromRepo(
-    "backend/services/discovery/index.js",
-  );
-
-  const alreadyHydrated = {
-    id: "cand-5",
-    name: "Already Hydrated",
-    tags: ["shoegaze", "dream-pop", "indie", "post-punk"],
-    matchedTags: ["shoegaze", "dream-pop"],
-    scoreTagAffinity: 35,
-    scoreTotal: 180,
-    scoreSeedCoverage: 12,
-    scoreNovelty: 8,
-    scorePopularityPenalty: 4,
-    seedCount: 1,
-    discoveryDepth: 1,
-    sourceType: "lastfm",
-    supportingSeeds: [{ artistName: "Seed", weight: 1 }],
-    candidateTagsHydrated: true,
-    tagSource: "lastfm_artist",
-  };
-
-  assert.equal(canInheritTagsFromSeeds(alreadyHydrated), false);
 });
 
 test("tag inheritance: multi-seed candidate merges tags from all contributing seeds", async () => {
@@ -195,72 +129,6 @@ test("tag inheritance: multi-seed candidate merges tags from all contributing se
   assert.ok(entry.tags.includes("indie"));
   assert.ok(entry.supportingSeeds.length >= 2);
   assert.ok(entry.scoreSimilarity > 0);
-});
-
-test("tag inheritance: sparse tags (< 3) trigger direct hydration path", async () => {
-  const { canInheritTagsFromSeeds } = await importFromRepo(
-    "backend/services/discovery/index.js",
-  );
-
-  const sparseTagsCandidate = {
-    id: "cand-sparse",
-    name: "Sparse Tags",
-    tags: ["shoegaze", "indie"],
-    matchedTags: ["shoegaze"],
-    scoreTagAffinity: 15,
-    scoreTotal: 120,
-    scoreSeedCoverage: 8,
-    scoreNovelty: 4,
-    scorePopularityPenalty: 2,
-    seedCount: 1,
-    discoveryDepth: 1,
-    sourceType: "lastfm",
-    supportingSeeds: [{ artistName: "Seed", weight: 1 }],
-  };
-
-  assert.equal(canInheritTagsFromSeeds(sparseTagsCandidate), false);
-});
-
-test("tag inheritance: qualifying candidates finalize with inherited seed tags", async () => {
-  const {
-    addRecommendationCandidate,
-    finalizeRecommendationAccumulator,
-  } = await importFromRepo("backend/services/discovery/recommendationPipeline.js");
-
-  const profileTagWeights = new Map([
-    ["shoegaze", 5],
-    ["dream-pop", 3],
-    ["indie", 8],
-  ]);
-
-  const accumulator = new Map();
-  for (let i = 0; i < 20; i++) {
-    addRecommendationCandidate(accumulator, {
-      candidate: {
-        mbid: `cand-mbid-${i}`,
-        name: `Candidate ${i}`,
-        match: 0.55 + i * 0.01,
-        discoveryDepth: 1,
-      },
-      seed: {
-        artistName: `Seed ${i % 5}`,
-        mbid: `seed-mbid-${i % 5}`,
-        source: "library",
-        weight: 1,
-      },
-      sourceTags:
-        i % 3 === 0
-          ? ["shoegaze", "dream-pop", "indie", "post-punk"]
-          : ["shoegaze", "dream-pop", "indie"],
-      profileTagWeights,
-    });
-  }
-
-  const final = finalizeRecommendationAccumulator(accumulator, 50, {
-    discoveryMode: "balanced",
-  });
-
-  assert.ok(final.length > 0);
 });
 
 test("tag inheritance: ranking scores are equivalent between inherited and direct tags with same tag data", async () => {

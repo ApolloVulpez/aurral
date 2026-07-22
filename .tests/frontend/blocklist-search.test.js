@@ -45,5 +45,8 @@ test("Blocklist appears after Activity in the sidebar", async () => {
     "utf8",
   );
 
-  assert.ok(source.indexOf('label: "Activity"') < source.indexOf('label: "Blocklist"'));
+  const activityIndex = source.indexOf('label: "Activity"');
+  const blocklistIndex = source.indexOf('label: "Blocklist"');
+  assert.notEqual(activityIndex, -1);
+  assert.ok(blocklistIndex > activityIndex);
 });

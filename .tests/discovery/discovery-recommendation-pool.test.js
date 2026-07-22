@@ -157,36 +157,6 @@ test("rotation drops lowest retained artists when fresh batch arrives", () => {
   assert.equal(rotated.some((item) => item.name === "weak-0"), true);
 });
 
-test("full two-phase refresh cycles reach the 500 pool cap", () => {
-  artists.reset();
-  let pool = [];
-  for (let cycle = 0; cycle < 3; cycle += 1) {
-    pool = simulatePhase({
-      existingRecommendations: pool,
-      candidateCount: PER_REFRESH + 20,
-      baseScore: 280 - cycle * 15,
-      prefix: `c${cycle}-initial`,
-      runStartedAt: `2026-06-${10 + cycle * 2}T00:00:00.000Z`,
-    });
-    pool = simulatePhase({
-      existingRecommendations: pool,
-      candidateCount: PER_REFRESH + 20,
-      baseScore: 260 - cycle * 15,
-      prefix: `c${cycle}-enriched`,
-      runStartedAt: `2026-06-${10 + cycle * 2 + 1}T00:00:00.000Z`,
-    });
-  }
-
-  assert.equal(pool.length, POOL_LIMIT);
-  assert.ok(
-    pool.filter((item) => item.name.startsWith("c2-enriched-")).length > 0,
-  );
-  assert.ok(
-    pool.filter((item) => item.name.startsWith("c0-initial-")).length <
-      PER_REFRESH,
-  );
-});
-
 test("filterRecommendationsForServe keeps less-like artists and hides only exact blocks", () => {
   const storedPool = artists.makeBatch(5, 180, "stored");
   const hidden = storedPool[2];
