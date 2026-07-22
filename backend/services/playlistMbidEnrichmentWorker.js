@@ -8,11 +8,14 @@ async function processPlaylistMbidEnrichment(payload = {}) {
   const kind = String(payload?.kind || payload?.type || "").trim();
   switch (kind) {
     case "playlist-mbid-enrichment": {
-      return enrichSharedPlaylistMbids(payload.playlistId);
+      return enrichSharedPlaylistMbids(payload.playlistId, {
+        reconcileArtistMbids: payload?.reconcileArtistMbids === true,
+      });
     }
     case "playlist-mbid-enrichment-sweep": {
       const jobIds = schedulePlaylistMbidEnrichmentForMissingPlaylists({
         reason: payload?.reason || "sweep",
+        reconcileArtistMbids: payload?.reconcileArtistMbids === true,
       });
       return {
         success: true,

@@ -34,21 +34,10 @@ export async function runScheduledRefresh() {
 
 export async function startWorkerIfPending() {
   const pending = downloadTracker.getNextPending();
-  if (pending) {
-    if (weeklyFlowWorker.running) {
-      weeklyFlowWorker.wake();
-      return;
-    }
-    await weeklyFlowWorker.start();
+  if (!pending) return;
+  if (weeklyFlowWorker.running) {
+    weeklyFlowWorker.wake();
     return;
   }
-  const flowIds = flowPlaylistConfig
-    .getFlows()
-    .filter((flow) => flow?.enabled === true)
-    .map((flow) => flow.id);
-  const sharedIds = flowPlaylistConfig.getSharedPlaylists().map((playlist) => playlist.id);
-  const playlistIds = [...new Set([...flowIds, ...sharedIds])];
-  for (const playlistId of playlistIds) {
-    await weeklyFlowWorker.retryIncompletePlaylist(playlistId);
-  }
+  await weeklyFlowWorker.start();
 }

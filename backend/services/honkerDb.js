@@ -364,7 +364,11 @@ export function enqueueHonkerStartupTasks() {
   );
   enqueueSystemTaskJob({ kind: "discovery-bootstrap" }, { delaySeconds: 15, priority: 5 });
   enqueuePlaylistMbidEnrichmentJob(
-    { kind: "playlist-mbid-enrichment-sweep", reason: "startup" },
+    {
+      kind: "playlist-mbid-enrichment-sweep",
+      reason: "startup",
+      reconcileArtistMbids: true,
+    },
     { delaySeconds: 30, priority: -5 },
   );
 }

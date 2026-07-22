@@ -7,7 +7,7 @@ Imported playlists are separate from flows.
 
 - They do not regenerate on a schedule.
 - They do not use source mix, focus filters, or deep dive.
-- They retry the exact tracklist they were imported with.
+- They keep the exact tracklist they were imported with.
 - They can reuse completed Aurral tracks or existing Lidarr files when worker settings allow.
 
 ![Aurral playlist import](../../../assets/screenshots/playlist-import.webp)
@@ -165,9 +165,9 @@ A top-level array of track objects is treated as one playlist. This is what the 
 Imported playlists behave differently from flows when downloads fail:
 
 - Each imported track is queued as its own worker job.
-- Retryable failures get an immediate retry with backoff.
-- If a playlist is incomplete and has no pending or downloading jobs, failed tracks are requeued in the periodic incomplete-playlist cycle (about every 15 minutes).
-- Imported playlists keep retrying the same original tracklist.
+- The active download pipeline may try multiple candidates and configured sources.
+- After those options are exhausted, the track remains failed across worker and container restarts.
+- Choose **Re-search missing** from the playlist menu to explicitly queue failed tracks again.
 - Only flows may generate replacement tracks.
 
 ## Existing file reuse

@@ -12,11 +12,13 @@ The **Playlists** page is where flows and imported playlists live. Both download
 |           | Flows                                  | Static playlists                 |
 | --------- | -------------------------------------- | -------------------------------- |
 | Tracklist | Regenerates on a schedule              | Fixed from import or export      |
-| Downloads | Can generate replacement picks         | Retries the exact tracks forever |
+| Downloads | Can generate replacement picks         | Keeps the exact imported tracks  |
 | Controls  | Schedule, source mix, focus, deep dive | None of the flow controls        |
 | Worker    | Shared download worker                 | Shared download worker           |
 
 Flows are dynamic playlists that refresh automatically based on your listening context and flow recipe. Static playlists come from Spotify, imported JSON, or exported flow tracklists.
+
+When a playlist track exhausts its download candidates and sources, it remains failed across Aurral restarts. Use **Re-search missing** from the playlist menu when you want to try those tracks again.
 
 ## Import and Lidarr sync
 

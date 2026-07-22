@@ -13,13 +13,18 @@ const [
   { dbOps },
   { flowPlaylistConfig },
   { downloadTracker },
-  { enrichSharedPlaylistMbids },
+  { getPlaylistMbidEnrichmentQueue },
+  {
+    enrichSharedPlaylistMbids,
+    schedulePlaylistMbidEnrichmentForMissingPlaylists,
+  },
 ] = await setupIsolatedBackend(
   "playlist-mbid-enrichment",
   "backend/config/db-sqlite.js",
   "backend/db/helpers/index.js",
   "backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js",
   "backend/services/weeklyFlow/weeklyFlowDownloadTracker.js",
+  "backend/services/honkerDb.js",
   "backend/services/playlistMbidEnrichmentService.js",
 );
 
@@ -138,4 +143,89 @@ test("enrichSharedPlaylistMbids leaves already-enriched tracks unchanged", async
 
   assert.equal(result.changed, true);
   assert.equal(result.playlistTracksUpdated, 1);
+});
+
+test("enrichSharedPlaylistMbids does not re-resolve complete tracks", async () => {
+  const playlist = flowPlaylistConfig.createSharedPlaylist({
+    name: "Complete",
+    tracks: [{
+      artistName: "Radiohead",
+      trackName: "Creep",
+      artistMbid: "radiohead-mbid",
+      albumMbid: "pablo-honey-mbid",
+      trackMbid: "creep-mbid",
+    }],
+  });
+  let resolverCalls = 0;
+
+  const result = await enrichSharedPlaylistMbids(playlist.id, {
+    resolveTrackContext: (track) => {
+      resolverCalls += 1;
+      return track;
+    },
+  });
+
+  assert.equal(resolverCalls, 0);
+  assert.equal(result.changed, false);
+});
+
+test("enrichSharedPlaylistMbids can reconcile complete tracks once when explicitly requested", async () => {
+  const playlist = flowPlaylistConfig.createSharedPlaylist({
+    name: "Needs artist repair",
+    tracks: [{
+      artistName: "Radiohead",
+      trackName: "Creep",
+      artistMbid: "wrong-artist-mbid",
+      albumMbid: "pablo-honey-mbid",
+      trackMbid: "creep-mbid",
+    }],
+  });
+
+  const result = await enrichSharedPlaylistMbids(playlist.id, {
+    reconcileArtistMbids: true,
+    resolveTrackContext: (track) => ({
+      ...track,
+      artistMbid: "radiohead-mbid",
+    }),
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(
+    flowPlaylistConfig.getSharedPlaylist(playlist.id)?.tracks?.[0]?.artistMbid,
+    "radiohead-mbid",
+  );
+});
+
+test("startup artist reconciliation is scheduled only once", () => {
+  const playlist = flowPlaylistConfig.createSharedPlaylist({
+    name: "One-time artist repair",
+    tracks: [{
+      artistName: "Radiohead",
+      trackName: "Creep",
+      artistMbid: "radiohead-mbid",
+      albumMbid: "pablo-honey-mbid",
+      trackMbid: "creep-mbid",
+    }],
+  });
+
+  const first = schedulePlaylistMbidEnrichmentForMissingPlaylists({
+    reason: "startup",
+    reconcileArtistMbids: true,
+  });
+  const second = schedulePlaylistMbidEnrichmentForMissingPlaylists({
+    reason: "startup",
+    reconcileArtistMbids: true,
+  });
+
+  const queue = getPlaylistMbidEnrichmentQueue();
+  const getPlaylistId = (jobId) => {
+    const payload = queue.getJob(jobId)?.payload;
+    const parsed = typeof payload === "string" ? JSON.parse(payload) : payload;
+    return parsed?.playlistId;
+  };
+  assert.ok(first.some((jobId) => getPlaylistId(jobId) === playlist.id));
+  assert.ok(!second.some((jobId) => getPlaylistId(jobId) === playlist.id));
+  for (const jobId of [...first, ...second]) {
+    queue.cancel(jobId);
+  }
 });

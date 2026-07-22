@@ -15,7 +15,7 @@ import {
 } from "./weeklyFlowFileReuse.js";
 import { resolvePlaylistRoot as resolveWeeklyFlowRoot } from "../playlistPaths.js";
 import { startSlskdOrchestratorWorker } from "../slskdOrchestratorWorker.js";
-import { enqueuePlaylistRetryJob, withHonkerLock } from "../honkerDb.js";
+import { withHonkerLock } from "../honkerDb.js";
 import {
   getDownloadSourceNotConfiguredMessage,
   isAnyDownloadSourceConfigured,
@@ -24,7 +24,6 @@ import {
 const DEFAULT_CONCURRENCY = 3;
 const MIN_CONCURRENCY = 1;
 const MAX_CONCURRENCY = 3;
-const DEFAULT_RETRY_CYCLE_MINUTES = 360;
 const JOB_COOLDOWN_MS = 750;
 const REUSE_REPAIR_INTERVAL_MS = 30 * 60 * 1000;
 const WORKER_STOPPED_CODE = "WORKER_STOPPED";
@@ -255,9 +254,6 @@ export class WeeklyFlowWorker {
     return normalizeExistingFileMode(value);
   }
 
-  _getIncompleteRetryDelayMs() {
-    return Math.max(1000, DEFAULT_RETRY_CYCLE_MINUTES * 60 * 1000);
-  }
   _getNextReadyPendingJob(lastPlaylistType = null) {
     return downloadTracker.getNextPendingMatching(() => true, lastPlaylistType);
   }
@@ -267,7 +263,6 @@ export class WeeklyFlowWorker {
     const raw = settings?.playlistWorker || {};
     return {
       concurrency: this._normalizeConcurrency(raw.concurrency),
-      retryCycleMinutes: DEFAULT_RETRY_CYCLE_MINUTES,
       retryPausedPlaylistIds: this._normalizeRetryPausedPlaylistIds(raw.retryPausedPlaylistIds),
       existingFileMode: this._normalizeExistingFileMode(raw.existingFileMode),
     };
@@ -281,7 +276,6 @@ export class WeeklyFlowWorker {
         nextSettings.concurrency === undefined
           ? base.concurrency
           : this._normalizeConcurrency(nextSettings.concurrency),
-      retryCycleMinutes: DEFAULT_RETRY_CYCLE_MINUTES,
       retryPausedPlaylistIds: this._normalizeRetryPausedPlaylistIds(base.retryPausedPlaylistIds),
       existingFileMode:
         nextSettings.existingFileMode === undefined
@@ -523,54 +517,6 @@ export class WeeklyFlowWorker {
     return removed;
   }
 
-  _requeueFailedJobs(playlistType, reason = null) {
-    if (this._isRetryCyclePaused(playlistType)) return 0;
-    const jobs = downloadTracker.getByPlaylistType(playlistType);
-    let requeued = 0;
-    for (const job of jobs) {
-      if (job.status !== "failed") continue;
-      const priorError = String(job?.error || "").trim();
-      const retryReason = [String(reason || "").trim(), priorError].filter(Boolean).join(" • ");
-      if (
-        downloadTracker.setPending(job.id, retryReason || null, {
-          asRetryCycle: true,
-        })
-      ) {
-        requeued += 1;
-      }
-    }
-    return requeued;
-  }
-
-  _scheduleIncompleteRetry(playlistType, delayMs = this._getIncompleteRetryDelayMs()) {
-    if (!playlistType) return;
-    if (this._isRetryCyclePaused(playlistType)) {
-      this.clearIncompleteRetry(playlistType);
-      return;
-    }
-    if (
-      !flowPlaylistConfig.getFlow(playlistType) &&
-      !flowPlaylistConfig.getSharedPlaylist(playlistType)
-    ) {
-      this.clearIncompleteRetry(playlistType);
-      return;
-    }
-    if (this.getScheduledRetryJobId(playlistType) != null) return;
-    const waitMs = Math.max(1000, Math.floor(Number(delayMs) || this._getIncompleteRetryDelayMs()));
-    const jobId = enqueuePlaylistRetryJob(
-      {
-        playlistType,
-        requestedAt: Date.now(),
-      },
-      {
-        delaySeconds: Math.ceil(waitMs / 1000),
-      },
-    );
-    const registry = this._getRetryJobRegistry();
-    registry[String(playlistType)] = jobId;
-    this._setRetryJobRegistry(registry);
-  }
-
   markIncompleteRetryDequeued(playlistType, jobId = null) {
     const key = String(playlistType || "").trim();
     if (!key) return;
@@ -605,10 +551,6 @@ export class WeeklyFlowWorker {
       this.clearIncompleteRetry(playlistType);
       return 0;
     }
-    if (this._isPlaylistBlocked(playlistType)) {
-      this._scheduleIncompleteRetry(playlistType, 60 * 1000);
-      return 0;
-    }
 
     const stats = downloadTracker.getPlaylistTypeStats(playlistType);
     const target = this._getPlaylistTargetCount(playlistType);
@@ -624,19 +566,7 @@ export class WeeklyFlowWorker {
       }
       return 0;
     }
-
-    const changed = this._requeueFailedJobs(playlistType, "Retrying incomplete playlist");
-
-    if (changed > 0) {
-      if (this.running) {
-        this.wake();
-      } else {
-        await this.start();
-      }
-      return changed;
-    }
-
-    this._scheduleIncompleteRetry(playlistType);
+    this.clearIncompleteRetry(playlistType);
     return 0;
   }
 
@@ -900,6 +830,10 @@ export class WeeklyFlowWorker {
     const allSettled = total > 0 && pending === 0 && downloading === 0;
     const hasDone = done > 0;
 
+    if (allSettled) {
+      this.clearIncompleteRetry(playlistType);
+    }
+
     if (allSettled && hasDone) {
       if (this.playlistFinalizing.has(playlistKey)) {
         return;
@@ -909,7 +843,6 @@ export class WeeklyFlowWorker {
         await withHonkerLock(
           `playlist-finalize:${playlistKey}`,
           async () => {
-            this.clearIncompleteRetry(playlistType);
             console.log(
               `[WeeklyFlowWorker] All jobs complete for ${playlistType}, ensuring playlists...`,
             );

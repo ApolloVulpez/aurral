@@ -11,8 +11,11 @@ import {
   normalizeSharedTrack,
   tracksShareMembership,
 } from "./weeklyFlow/weeklyFlowPlaylistConfig.js";
+import { dbOps } from "../db/helpers/index.js";
 
 const PLAYLIST_MBID_ENRICHMENT_DELAY_SECONDS = 20;
+const ARTIST_MBID_RECONCILIATION_KEY = "playlistArtistMbidReconciliationVersion";
+const ARTIST_MBID_RECONCILIATION_VERSION = 1;
 
 function hasValue(value) {
   return String(value || "").trim() !== "";
@@ -29,9 +32,7 @@ function hasMissingJobMbid(track, jobs) {
 }
 
 function hasMissingPlaylistMbids(playlist) {
-  return (Array.isArray(playlist?.tracks) ? playlist.tracks : []).some(
-    (track) => isMissingMbid(track) || hasValue(track?.albumMbid),
-  );
+  return (Array.isArray(playlist?.tracks) ? playlist.tracks : []).some(isMissingMbid);
 }
 
 function mergeMissingString(target, source, key, { overwrite = false } = {}) {
@@ -124,9 +125,11 @@ function matchingJobsForTrack(track, jobs) {
   return (Array.isArray(jobs) ? jobs : []).filter((job) => tracksShareMembership(job, track));
 }
 
-async function buildResolution(track, jobs, resolveTrackContext) {
+async function buildResolution(track, jobs, resolveTrackContext, reconcileArtistMbids = false) {
   const shouldResolve =
-    isMissingMbid(track) || hasValue(track?.albumMbid) || hasMissingJobMbid(track, jobs);
+    isMissingMbid(track) ||
+    (reconcileArtistMbids && hasValue(track?.albumMbid)) ||
+    hasMissingJobMbid(track, jobs);
   if (!shouldResolve) {
     return null;
   }
@@ -165,6 +168,7 @@ export function schedulePlaylistMbidEnrichment(
     reason = "playlist-update",
     delaySeconds = PLAYLIST_MBID_ENRICHMENT_DELAY_SECONDS,
     priority = 0,
+    reconcileArtistMbids = false,
   } = {},
 ) {
   const safePlaylistId = String(playlistId || "").trim();
@@ -174,6 +178,7 @@ export function schedulePlaylistMbidEnrichment(
       kind: "playlist-mbid-enrichment",
       playlistId: safePlaylistId,
       reason,
+      reconcileArtistMbids: reconcileArtistMbids === true,
       requestedAt: Date.now(),
     },
     {
@@ -183,7 +188,14 @@ export function schedulePlaylistMbidEnrichment(
   );
 }
 
-export function schedulePlaylistMbidEnrichmentForMissingPlaylists({ reason = "sweep" } = {}) {
+export function schedulePlaylistMbidEnrichmentForMissingPlaylists({
+  reason = "sweep",
+  reconcileArtistMbids = false,
+} = {}) {
+  const shouldReconcileArtistMbids =
+    reconcileArtistMbids === true &&
+    Number(dbOps.getJSONSetting(ARTIST_MBID_RECONCILIATION_KEY) || 0) <
+      ARTIST_MBID_RECONCILIATION_VERSION;
   const jobIds = [];
   for (const playlist of flowPlaylistConfig.getSharedPlaylists()) {
     const jobs = downloadTracker.getByPlaylistType(playlist.id);
@@ -191,20 +203,35 @@ export function schedulePlaylistMbidEnrichmentForMissingPlaylists({ reason = "sw
     const hasMissingJobs = (Array.isArray(playlist?.tracks) ? playlist.tracks : []).some((track) =>
       hasMissingJobMbid(track, jobs),
     );
-    if (!hasMissingConfig && !hasMissingJobs) continue;
+    const hasAlbumMbids = (Array.isArray(playlist?.tracks) ? playlist.tracks : []).some((track) =>
+      hasValue(track?.albumMbid),
+    );
+    if (!hasMissingConfig && !hasMissingJobs && !(shouldReconcileArtistMbids && hasAlbumMbids)) {
+      continue;
+    }
     const jobId = schedulePlaylistMbidEnrichment(playlist.id, {
       reason,
       delaySeconds: 0,
       priority: -5,
+      reconcileArtistMbids: shouldReconcileArtistMbids,
     });
     if (jobId != null) jobIds.push(jobId);
+  }
+  if (shouldReconcileArtistMbids) {
+    dbOps.setJSONSetting(
+      ARTIST_MBID_RECONCILIATION_KEY,
+      ARTIST_MBID_RECONCILIATION_VERSION,
+    );
   }
   return jobIds;
 }
 
 export async function enrichSharedPlaylistMbids(
   playlistId,
-  { resolveTrackContext = resolveWeeklyFlowTrackContext } = {},
+  {
+    resolveTrackContext = resolveWeeklyFlowTrackContext,
+    reconcileArtistMbids = false,
+  } = {},
 ) {
   const safePlaylistId = String(playlistId || "").trim();
   if (!safePlaylistId) return { missing: true, changed: false };
@@ -222,7 +249,7 @@ export async function enrichSharedPlaylistMbids(
       ? resolveTrackContext
       : resolveWeeklyFlowTrackContext;
   const rawResolutions = await mapWithConcurrency(snapshotTracks, 4, (track) =>
-    buildResolution(track, snapshotJobs, resolver),
+    buildResolution(track, snapshotJobs, resolver, reconcileArtistMbids === true),
   );
   const resolutions = rawResolutions.filter(Boolean);
   for (const resolution of resolutions) {
