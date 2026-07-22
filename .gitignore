@@ -45,3 +45,5 @@ coverage/
 *.temp
 /*.mp3
 .cursor/
+AGENTS.md
+/docs/agents/
