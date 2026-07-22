@@ -20,6 +20,7 @@ import {
   hasNextCandidate,
   buildNextCandidatePayload,
   mergeSearchResults,
+  blockPipelineJobForReview,
   finalizePipelineJobSuccess,
 } from "./pipelineHelpers.js";
 
@@ -173,6 +174,16 @@ async function handleYtdlpFinalize(payload, helpers) {
     resolvedTrack,
   );
   if (!validation.valid) {
+    if (
+      blockPipelineJobForReview({
+        downloadTracker,
+        job,
+        validation,
+        sourcePath: filePath,
+      })
+    ) {
+      return null;
+    }
     await fs.rm(filePath, { force: true }).catch(() => {});
     await ytdlpClient.cleanupStaging(job.id);
     const reason = validation.reason || "yt-dlp download failed track validation";

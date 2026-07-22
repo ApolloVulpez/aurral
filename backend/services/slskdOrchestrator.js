@@ -36,6 +36,7 @@ import {
   hasNextCandidate,
   buildNextCandidatePayload,
   mergeSearchResults,
+  blockPipelineJobForReview,
   finalizePipelineJobSuccess,
 } from "./pipelineHelpers.js";
 
@@ -1020,8 +1021,14 @@ async function handleFinalize(payload) {
       remoteFile,
       sourcePath,
     });
-    if (validation.blocked) {
-      downloadTracker.setBlocked(job.id, validation.reason, sourcePath);
+    if (
+      blockPipelineJobForReview({
+        downloadTracker,
+        job,
+        validation,
+        sourcePath,
+      })
+    ) {
       recordPayloadOutcome(
         job,
         payload,
@@ -1029,9 +1036,6 @@ async function handleFinalize(payload) {
         validation.reason || "Blocked for review",
         { transfer, sourcePath, validation },
       );
-      import("./aurralHistoryService.js")
-        .then(({ recordTrackJobBlocked }) => recordTrackJobBlocked(job, validation.reason))
-        .catch(() => {});
       return null;
     }
     recordPayloadOutcome(

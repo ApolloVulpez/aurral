@@ -35,6 +35,22 @@ export function mergeSearchResults(aggregated, seen, items, buildKey) {
   }
 }
 
+export function blockPipelineJobForReview({
+  downloadTracker,
+  job,
+  validation,
+  sourcePath,
+}) {
+  const stagingPath = String(sourcePath || "").trim();
+  if (!validation?.blocked || !stagingPath) return false;
+  const reason = validation.reason || "Blocked for review";
+  if (!downloadTracker.setBlocked(job.id, reason, stagingPath)) return false;
+  import("./aurralHistoryService.js")
+    .then(({ recordTrackJobBlocked }) => recordTrackJobBlocked(job, reason))
+    .catch(() => {});
+  return true;
+}
+
 export async function finalizePipelineJobSuccess({
   downloadTracker,
   job,

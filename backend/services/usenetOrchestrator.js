@@ -27,6 +27,7 @@ import {
   hasNextCandidate,
   buildNextCandidatePayload,
   mergeSearchResults,
+  blockPipelineJobForReview,
   finalizePipelineJobSuccess,
 } from "./pipelineHelpers.js";
 
@@ -151,11 +152,13 @@ async function locateBestDownloadedAudio(historyItem, candidate, resolvedTrack, 
       if (!best || score > best.score) {
         best = { filePath, validation, score };
       }
-    } else if (!best?.valid && (!best || score > best.score)) {
+    } else if (!best?.validation?.valid && (!best || score > best.score)) {
       best = { filePath, validation, score };
     }
   }
-  return best?.validation?.valid ? best : { filePath: null, validation: best?.validation || null };
+  return best?.validation?.valid || best?.validation?.blocked
+    ? best
+    : { filePath: null, validation: best?.validation || null };
 }
 
 async function handleUsenetSearch(payload, helpers) {
@@ -358,6 +361,16 @@ async function handleUsenetFinalize(payload, helpers) {
   const historyItem = payload.history || (await client.getHistoryItem(payload.nzbId));
   const resolvedTrack = buildResolvedTrack(job, payload.track);
   const found = await locateBestDownloadedAudio(historyItem, candidate, resolvedTrack, client);
+  if (
+    blockPipelineJobForReview({
+      downloadTracker,
+      job,
+      validation: found.validation,
+      sourcePath: found.filePath,
+    })
+  ) {
+    return null;
+  }
   if (!found.filePath) {
     const reason =
       found.validation?.reason ||
