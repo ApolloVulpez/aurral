@@ -132,6 +132,12 @@ export const getCoverImage = (coverImages) => {
   return front?.image || coverImages[0]?.image;
 };
 
+export const getReleaseGroupCoverUrl = (releaseGroup, albumCovers = {}) => {
+  if (!releaseGroup) return "";
+  const id = releaseGroup.id || releaseGroup.mbid || releaseGroup.foreignAlbumId;
+  return (id && albumCovers[id]) || releaseGroup.coverUrl || releaseGroup._coverUrl || "";
+};
+
 const getImageKinds = (image) => {
   const kinds = [
     image?.coverType,

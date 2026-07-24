@@ -21,7 +21,6 @@ export function ArtistDetailsLibraryAlbums({
   reSearchingAlbum,
   reSearchingMissingAlbums,
   albumCovers,
-  artistCoverImage,
   albumDropdownOpen,
   setAlbumDropdownOpen,
   canDeleteAlbum,
@@ -154,7 +153,8 @@ export function ArtistDetailsLibraryAlbums({
     navigateToLibraryAlbum(navigate, libraryAlbum, {
       artistMbid: artist?.id,
       artistName: artistName || artist?.name || "",
-      coverUrl: albumCovers[rgId] || albumCovers[libraryAlbum.id] || artistCoverImage || "",
+      coverUrl:
+        albumCovers[rgId] || albumCovers[libraryAlbum.id] || libraryAlbum.coverUrl || "",
     });
   };
 
@@ -295,7 +295,8 @@ export function ArtistDetailsLibraryAlbums({
         {visibleAlbums.map((libraryAlbum) => {
           const rgId = libraryAlbum.mbid || libraryAlbum.foreignAlbumId;
           const { downloadStatus, isComplete, canReSearch } = getAlbumState(libraryAlbum);
-          const coverUrl = albumCovers[rgId] || artistCoverImage;
+          const coverUrl =
+            albumCovers[rgId] || albumCovers[libraryAlbum.id] || libraryAlbum.coverUrl || "";
           const hasDownloadedStatus =
             isComplete ||
             downloadStatus?.status === "added" ||

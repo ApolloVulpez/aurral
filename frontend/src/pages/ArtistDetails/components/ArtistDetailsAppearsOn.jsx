@@ -4,7 +4,7 @@ import { ArrowRight, Loader, Music, Star } from "lucide-react";
 import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
 import AddActionButton from "../../../components/AddActionButton";
 import { navigateToReleaseGroup } from "../../../utils/searchNavigation";
-import { getReleaseMetric, getReleaseYear } from "../utils";
+import { getReleaseGroupCoverUrl, getReleaseMetric, getReleaseYear } from "../utils";
 import { getAlbumAddButtonLabel } from "../../../utils/albumAddAction";
 
 const sortLatest = (items) =>
@@ -16,7 +16,6 @@ export function ArtistDetailsAppearsOn({
   artist,
   loadingAppearsOn = false,
   albumCovers,
-  artistCoverImage,
   getAlbumStatus,
   canAddAlbum,
   handleRequestAlbum,
@@ -40,7 +39,7 @@ export function ArtistDetailsAppearsOn({
     navigateToReleaseGroup(navigate, releaseGroup, {
       artistMbid: artist?.id,
       artistName: artistName || artist?.name || "",
-      coverUrl: albumCovers[releaseGroup.id] || artistCoverImage || "",
+      coverUrl: getReleaseGroupCoverUrl(releaseGroup, albumCovers),
     });
   };
 
@@ -68,6 +67,7 @@ export function ArtistDetailsAppearsOn({
           const status = getAlbumStatus(releaseGroup.id);
           const metric = getReleaseMetric(releaseGroup);
           const artistCredit = releaseGroup["artist-credit"]?.[0]?.name || "";
+          const coverUrl = getReleaseGroupCoverUrl(releaseGroup, albumCovers);
           return (
             <article
               key={releaseGroup.id}
@@ -75,13 +75,8 @@ export function ArtistDetailsAppearsOn({
               onClick={() => openRelease(releaseGroup)}
             >
               <div className="artist-release-card__cover">
-                {albumCovers[releaseGroup.id] || artistCoverImage ? (
-                  <img
-                    src={albumCovers[releaseGroup.id] || artistCoverImage}
-                    alt=""
-                    loading="lazy"
-                    decoding="async"
-                  />
+                {coverUrl ? (
+                  <img src={coverUrl} alt="" loading="lazy" decoding="async" />
                 ) : (
                   <div className="artist-release-card__placeholder">
                     <Music className="artist-icon-lg" />

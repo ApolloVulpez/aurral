@@ -14,7 +14,6 @@ import {
 } from "../../utils/api/endpoints/playlists.js";
 import {
   buildSharedPlaylistTrackPayload,
-  getCoverImage,
   reserveUniquePlaylistName,
 } from "./utils";
 import { useArtistTasteFeedback } from "../../hooks/useArtistTasteFeedback";
@@ -443,7 +442,6 @@ function ArtistDetailsPage() {
     return null;
   }
 
-  const artistCoverImage = getCoverImage(coverImages);
   const playbackSource = {
     type: "artist",
     id: mbid,
@@ -502,7 +500,6 @@ function ArtistDetailsPage() {
         getAlbumStatus={library.getAlbumStatus}
         artist={artist}
         albumCovers={albumCovers}
-        artistCoverImage={artistCoverImage}
         canAddAlbum={canAddAlbum}
         requestingAlbum={library.requestingAlbum}
         handleRequestAlbum={library.handleRequestAlbum}
@@ -527,7 +524,6 @@ function ArtistDetailsPage() {
           reSearchingAlbum={library.reSearchingAlbum}
           reSearchingMissingAlbums={library.reSearchingMissingAlbums}
           albumCovers={albumCovers}
-          artistCoverImage={artistCoverImage}
           albumDropdownOpen={library.albumDropdownOpen}
           setAlbumDropdownOpen={library.setAlbumDropdownOpen}
           canDeleteAlbum={canDeleteAlbum}
@@ -545,7 +541,6 @@ function ArtistDetailsPage() {
           artist={artist}
           loadingReleases={loadingReleases}
           albumCovers={albumCovers}
-          artistCoverImage={artistCoverImage}
           getAlbumStatus={library.getAlbumStatus}
           canAddAlbum={canAddAlbum}
           handleRequestAlbum={library.handleRequestAlbum}
@@ -567,7 +562,6 @@ function ArtistDetailsPage() {
           artist={artist}
           loadingAppearsOn={loadingAppearsOn}
           albumCovers={albumCovers}
-          artistCoverImage={artistCoverImage}
           getAlbumStatus={library.getAlbumStatus}
           canAddAlbum={canAddAlbum}
           handleRequestAlbum={library.handleRequestAlbum}

@@ -3,7 +3,7 @@ import { Loader, Music, Star } from "lucide-react";
 import AddActionButton from "../../../components/AddActionButton";
 import { useImageGradientColors } from "../../../utils/imageColors";
 import { getReleaseGroupTracks } from "../../../utils/api/endpoints/artists.js";
-import { buildAurralPick, getReleaseMetric } from "../utils";
+import { buildAurralPick, getReleaseGroupCoverUrl, getReleaseMetric } from "../utils";
 import { TrackPlaylistMenu } from "./TrackPlaylistMenu";
 import { TrackPlayButton } from "./TrackPlayButton";
 import { ArtistTrackListToolbar } from "./ArtistTrackListToolbar";
@@ -11,8 +11,8 @@ import { useAlbumTrackListToolbar } from "../../../hooks/useAlbumTrackListToolba
 import { useAudioQueue } from "../../../contexts/audioQueueContext";
 import { normalizePreviewTrack } from "../../../utils/audioQueue";
 
-function PickCover({ pick, albumCovers, artistCoverImage }) {
-  const cover = albumCovers?.[pick.releaseGroupId] || artistCoverImage;
+function PickCover({ pick, albumCovers }) {
+  const cover = getReleaseGroupCoverUrl(pick?.releaseGroup, albumCovers);
   if (cover) {
     return <img src={cover} alt="" loading="lazy" decoding="async" />;
   }
@@ -37,7 +37,6 @@ export function ArtistDetailsDownloadTargets({
   getAlbumStatus,
   artist,
   albumCovers,
-  artistCoverImage,
   canAddAlbum,
   requestingAlbum,
   handleRequestAlbum,
@@ -56,10 +55,7 @@ export function ArtistDetailsDownloadTargets({
     () => buildAurralPick({ releaseGroups, getAlbumStatus }),
     [releaseGroups, getAlbumStatus],
   );
-  const coverSrc =
-    (missingReleasePick &&
-      (albumCovers?.[missingReleasePick.releaseGroupId] || artistCoverImage)) ||
-    "";
+  const coverSrc = getReleaseGroupCoverUrl(missingReleasePick?.releaseGroup, albumCovers);
   const gradientColors = useImageGradientColors(coverSrc);
   const [tracks, setTracks] = useState([]);
   const [loadingTracks, setLoadingTracks] = useState(false);
@@ -218,11 +214,7 @@ export function ArtistDetailsDownloadTargets({
         ) : null}
         <div className="artist-pick-panel__grid">
           <div className="artist-media-cell">
-            <PickCover
-              pick={missingReleasePick}
-              albumCovers={albumCovers}
-              artistCoverImage={artistCoverImage}
-            />
+            <PickCover pick={missingReleasePick} albumCovers={albumCovers} />
           </div>
           <div className="artist-pick-panel__content">
             <div className="artist-min-0">
