@@ -18,6 +18,11 @@ const MAX_SOURCE_IMAGE_PIXELS = 40_000_000;
 const CARD_IMAGE_MAX_PX = 512;
 const CARD_IMAGE_MAX_BYTES = 150 * 1024;
 const WEBP_QUALITY = 70;
+// ponytail: FIFO by mtime, touch on serve for LRU; raise/env only if disk pressure complains
+const IMAGE_PROXY_MAX_BYTES = (() => {
+  const parsed = Number(process.env.AURRAL_IMAGE_PROXY_MAX_BYTES);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 256 * 1024 * 1024;
+})();
 const inflightRequests = new Map();
 const cacheEntriesByKey = new Map();
 const cacheKeysBySourceUrl = new Map();
@@ -166,6 +171,7 @@ const initializeCacheIndex = () => {
           }),
         );
       }
+      await pruneImageProxyCacheToLimit();
     } catch {}
   })();
 };
@@ -195,6 +201,79 @@ export const getImageProxyCacheSizeBytes = async () => {
     }
   } catch {}
   return total;
+};
+
+const removeCacheEntryFromDisk = async (cacheKey, extension, sourceUrl) => {
+  const normalizedKey = String(cacheKey || "").toLowerCase();
+  if (!normalizedKey) return;
+  const { metaPath, baseImagePath } = getCachePaths(normalizedKey);
+  const imagePath = extension ? `${baseImagePath}.${extension}` : null;
+  await Promise.allSettled([
+    imagePath ? fs.promises.unlink(imagePath) : Promise.resolve(),
+    fs.promises.unlink(metaPath),
+    removeStaleCachedFiles(normalizedKey, null),
+  ]);
+  cacheEntriesByKey.delete(normalizedKey);
+  const normalizedSource = normalizeKnownImageUrl(sourceUrl);
+  if (normalizedSource) {
+    cacheKeysBySourceUrl.delete(normalizedSource);
+  }
+};
+
+const pruneImageProxyCacheToLimit = async () => {
+  let entries = [];
+  try {
+    await ensureCacheDir();
+    const dir = await fs.promises.opendir(IMAGE_PROXY_DIR);
+    for await (const file of dir) {
+      if (!file.isFile() || !/^[a-f0-9]{64}\.json$/i.test(file.name)) continue;
+      const cacheKey = file.name.slice(0, 64).toLowerCase();
+      const metaPath = path.join(IMAGE_PROXY_DIR, file.name);
+      let meta = null;
+      try {
+        meta = JSON.parse(await fs.promises.readFile(metaPath, "utf8"));
+      } catch {
+        continue;
+      }
+      const extension = meta?.extension || "webp";
+      const imagePath = path.join(IMAGE_PROXY_DIR, `${cacheKey}.${extension}`);
+      let imageStat = null;
+      let metaStat = null;
+      try {
+        imageStat = await fs.promises.stat(imagePath);
+        metaStat = await fs.promises.stat(metaPath);
+      } catch {
+        continue;
+      }
+      entries.push({
+        cacheKey,
+        extension,
+        sourceUrl: meta?.sourceUrl || null,
+        mtimeMs: Math.max(Number(imageStat.mtimeMs) || 0, Number(metaStat.mtimeMs) || 0),
+        bytes: Number(imageStat.size || 0) + Number(metaStat.size || 0),
+      });
+    }
+  } catch {
+    return;
+  }
+
+  let total = entries.reduce((sum, entry) => sum + entry.bytes, 0);
+  if (total <= IMAGE_PROXY_MAX_BYTES) return;
+
+  entries.sort(
+    (a, b) => a.mtimeMs - b.mtimeMs || a.cacheKey.localeCompare(b.cacheKey),
+  );
+  for (const entry of entries) {
+    if (total <= IMAGE_PROXY_MAX_BYTES) break;
+    await removeCacheEntryFromDisk(entry.cacheKey, entry.extension, entry.sourceUrl);
+    total -= entry.bytes;
+  }
+};
+
+const touchCacheEntry = (imagePath) => {
+  if (!imagePath) return;
+  const now = new Date();
+  fs.promises.utimes(imagePath, now, now).catch(() => {});
 };
 
 export const isPrivateHostname = (hostname) => {
@@ -360,6 +439,7 @@ const writeCacheEntry = async (cacheKey, buffer, contentType, sourceUrl) => {
   if (sourceUrl) {
     cacheKeysBySourceUrl.set(sourceUrl, cacheKey);
   }
+  await pruneImageProxyCacheToLimit();
   return entry;
 };
 
@@ -648,6 +728,7 @@ export const handleImageProxyRequest = async (req, res) => {
 
   res.set("Content-Type", cached.meta.contentType || "image/jpeg");
   res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+  touchCacheEntry(cached.imagePath);
   return res.sendFile(cached.imagePath);
 };
 

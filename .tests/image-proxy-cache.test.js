@@ -64,3 +64,51 @@ test("image proxy caches one card-sized webp instead of full-resolution sources"
     await fs.rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test("image proxy cache prunes oldest entries over the size cap", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "aurral-image-cap-"));
+  const previousDataDir = process.env.AURRAL_DATA_DIR;
+  const previousMaxBytes = process.env.AURRAL_IMAGE_PROXY_MAX_BYTES;
+  const originalFetch = global.fetch;
+  process.env.AURRAL_DATA_DIR = dataDir;
+  process.env.AURRAL_IMAGE_PROXY_MAX_BYTES = String(200 * 1024);
+  try {
+    const sharp = (await import("sharp")).default;
+    const { warmImageProxy, getImageProxyCacheSizeBytes } = await import(
+      `../backend/services/imageProxyService.js?cap-test=${Date.now()}`
+    );
+    const noise = Buffer.alloc(512 * 512 * 3);
+    for (let i = 0; i < noise.length; i += 1) {
+      noise[i] = (i * 37 + (i % 251) * 13) % 256;
+    }
+
+    for (let i = 0; i < 6; i += 1) {
+      for (let j = 0; j < noise.length; j += 97) {
+        noise[j] = (noise[j] + i + 1) % 256;
+      }
+      const variant = await sharp(noise, {
+        raw: { width: 512, height: 512, channels: 3 },
+      })
+        .png()
+        .toBuffer();
+      global.fetch = async () =>
+        new Response(variant, { headers: { "content-type": "image/png" } });
+      await warmImageProxy(`https://images.example/cap-${i}.png`);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    const size = await getImageProxyCacheSizeBytes();
+    assert.ok(size <= 200 * 1024, `cache size ${size} exceeded 200KiB cap`);
+    const files = await fs.readdir(path.join(dataDir, "image-proxy"));
+    const images = files.filter((name) => name.endsWith(".webp"));
+    assert.ok(images.length >= 1);
+    assert.ok(images.length < 6);
+  } finally {
+    global.fetch = originalFetch;
+    if (previousDataDir === undefined) delete process.env.AURRAL_DATA_DIR;
+    else process.env.AURRAL_DATA_DIR = previousDataDir;
+    if (previousMaxBytes === undefined) delete process.env.AURRAL_IMAGE_PROXY_MAX_BYTES;
+    else process.env.AURRAL_IMAGE_PROXY_MAX_BYTES = previousMaxBytes;
+    await fs.rm(dataDir, { recursive: true, force: true });
+  }
+});

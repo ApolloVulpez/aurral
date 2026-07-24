@@ -43,6 +43,12 @@ Most setup happens in the web UI. These variables matter for Docker deployments.
 | -------- | ------- |
 | `AURRAL_VERBOSE_LOGS` | Fuller server logs while troubleshooting. |
 
+## Image proxy
+
+| Variable | Purpose |
+| -------- | ------- |
+| `AURRAL_IMAGE_PROXY_MAX_BYTES` | Max on-disk image-proxy cache size in bytes. Default `268435456` (256MB). Oldest entries are pruned first; serving an image refreshes its age. |
+
 ## Last.fm tuning
 
 | Variable | Purpose |
