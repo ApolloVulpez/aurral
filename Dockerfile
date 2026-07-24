@@ -51,14 +51,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     ca-certificates \
     libjemalloc2 \
-    && ln -sf "/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)/libjemalloc.so.2" /usr/local/lib/libjemalloc.so \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 1001 nodejs \
     && useradd --uid 1001 --gid nodejs --shell /usr/sbin/nologin --create-home nodejs \
     && mkdir -p /app/backend/data /config \
     && chown -R nodejs:nodejs /app/backend/data /config
 
-ENV LD_PRELOAD=/usr/local/lib/libjemalloc.so
+ENV LD_PRELOAD=libjemalloc.so.2
 
 ADD --chmod=755 --checksum=sha256:e5d57466682cfa9d61e9cf7c8a4f09b00f4a62af37d3bbdc4bcffdf63615feac \
     https://github.com/yt-dlp/yt-dlp/releases/download/2026.06.09/yt-dlp \
