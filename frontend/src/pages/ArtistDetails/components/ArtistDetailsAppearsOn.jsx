@@ -16,6 +16,8 @@ export function ArtistDetailsAppearsOn({
   artist,
   loadingAppearsOn = false,
   albumCovers,
+  fulfilledCoverIds,
+  artistCoverImage,
   getAlbumStatus,
   canAddAlbum,
   handleRequestAlbum,
@@ -35,11 +37,16 @@ export function ArtistDetailsAppearsOn({
     onVisibleCoverIdsChange?.(visibleReleaseGroups.map((item) => item.id).filter(Boolean));
   }, [onVisibleCoverIdsChange, visibleReleaseGroups]);
 
+  const coverOptions = (releaseGroup) => ({
+    artistFallback: artistCoverImage,
+    resolved: fulfilledCoverIds?.has(releaseGroup.id),
+  });
+
   const openRelease = (releaseGroup) => {
     navigateToReleaseGroup(navigate, releaseGroup, {
       artistMbid: artist?.id,
       artistName: artistName || artist?.name || "",
-      coverUrl: getReleaseGroupCoverUrl(releaseGroup, albumCovers),
+      coverUrl: getReleaseGroupCoverUrl(releaseGroup, albumCovers, coverOptions(releaseGroup)),
     });
   };
 
@@ -67,7 +74,11 @@ export function ArtistDetailsAppearsOn({
           const status = getAlbumStatus(releaseGroup.id);
           const metric = getReleaseMetric(releaseGroup);
           const artistCredit = releaseGroup["artist-credit"]?.[0]?.name || "";
-          const coverUrl = getReleaseGroupCoverUrl(releaseGroup, albumCovers);
+          const coverUrl = getReleaseGroupCoverUrl(
+            releaseGroup,
+            albumCovers,
+            coverOptions(releaseGroup),
+          );
           return (
             <article
               key={releaseGroup.id}

@@ -21,6 +21,8 @@ export function ArtistDetailsLibraryAlbums({
   reSearchingAlbum,
   reSearchingMissingAlbums,
   albumCovers,
+  fulfilledCoverIds,
+  artistCoverImage,
   albumDropdownOpen,
   setAlbumDropdownOpen,
   canDeleteAlbum,
@@ -150,11 +152,16 @@ export function ArtistDetailsLibraryAlbums({
 
   const openLibraryAlbum = (libraryAlbum) => {
     const rgId = libraryAlbum.mbid || libraryAlbum.foreignAlbumId;
+    const coverUrl =
+      albumCovers[rgId] ||
+      albumCovers[libraryAlbum.id] ||
+      libraryAlbum.coverUrl ||
+      (fulfilledCoverIds?.has(rgId) ? artistCoverImage : "") ||
+      "";
     navigateToLibraryAlbum(navigate, libraryAlbum, {
       artistMbid: artist?.id,
       artistName: artistName || artist?.name || "",
-      coverUrl:
-        albumCovers[rgId] || albumCovers[libraryAlbum.id] || libraryAlbum.coverUrl || "",
+      coverUrl,
     });
   };
 
@@ -296,7 +303,11 @@ export function ArtistDetailsLibraryAlbums({
           const rgId = libraryAlbum.mbid || libraryAlbum.foreignAlbumId;
           const { downloadStatus, isComplete, canReSearch } = getAlbumState(libraryAlbum);
           const coverUrl =
-            albumCovers[rgId] || albumCovers[libraryAlbum.id] || libraryAlbum.coverUrl || "";
+            albumCovers[rgId] ||
+            albumCovers[libraryAlbum.id] ||
+            libraryAlbum.coverUrl ||
+            (fulfilledCoverIds?.has(rgId) ? artistCoverImage : "") ||
+            "";
           const hasDownloadedStatus =
             isComplete ||
             downloadStatus?.status === "added" ||

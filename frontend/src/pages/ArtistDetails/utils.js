@@ -132,10 +132,17 @@ export const getCoverImage = (coverImages) => {
   return front?.image || coverImages[0]?.image;
 };
 
-export const getReleaseGroupCoverUrl = (releaseGroup, albumCovers = {}) => {
+export const getReleaseGroupCoverUrl = (
+  releaseGroup,
+  albumCovers = {},
+  { artistFallback = "", resolved = false } = {},
+) => {
   if (!releaseGroup) return "";
   const id = releaseGroup.id || releaseGroup.mbid || releaseGroup.foreignAlbumId;
-  return (id && albumCovers[id]) || releaseGroup.coverUrl || releaseGroup._coverUrl || "";
+  const albumCover =
+    (id && albumCovers[id]) || releaseGroup.coverUrl || releaseGroup._coverUrl || "";
+  if (albumCover) return albumCover;
+  return resolved && artistFallback ? artistFallback : "";
 };
 
 const getImageKinds = (image) => {

@@ -22,6 +22,7 @@ import { useArtistDetailsLibrary } from "./hooks/useArtistDetailsLibrary";
 import { useArtistSearchFocus } from "./hooks/useArtistSearchFocus";
 import { navigateToReleaseGroup } from "../../utils/searchNavigation";
 import {
+  getCoverImage,
   getReleaseGroupCoverUrl,
   getReleaseMetric,
   getReleaseYear,
@@ -133,7 +134,10 @@ function ArtistReleaseListPage({ mode = "releases" }) {
     setExistsInLibrary,
     appSettings,
     albumCovers,
+    fulfilledCoverIds,
+    coverImages,
   } = stream;
+  const artistCoverImage = getCoverImage(coverImages);
 
   const artistDisplayName = artist?.name || artistNameFromNav || "";
   useDocumentTitle(
@@ -302,7 +306,10 @@ function ArtistReleaseListPage({ mode = "releases" }) {
     navigateToReleaseGroup(navigate, releaseGroup, {
       artistMbid: mbid,
       artistName: artistDisplayName,
-      coverUrl: getReleaseGroupCoverUrl(releaseGroup, albumCovers),
+      coverUrl: getReleaseGroupCoverUrl(releaseGroup, albumCovers, {
+        artistFallback: artistCoverImage,
+        resolved: fulfilledCoverIds?.has(releaseGroup.id),
+      }),
     });
   };
 
@@ -325,7 +332,10 @@ function ArtistReleaseListPage({ mode = "releases" }) {
   const renderReleaseCard = (releaseGroup) => {
     const status = library.getAlbumStatus(releaseGroup.id);
     const metric = getReleaseMetric(releaseGroup);
-    const cover = getReleaseGroupCoverUrl(releaseGroup, albumCovers);
+    const cover = getReleaseGroupCoverUrl(releaseGroup, albumCovers, {
+      artistFallback: artistCoverImage,
+      resolved: fulfilledCoverIds?.has(releaseGroup.id),
+    });
     const isComplete = status?.status === "available" || status?.status === "added";
     const releaseTypeLabel = getReleaseTypeLabel(releaseGroup);
     const artistCredit = isAppearsOn ? releaseGroup["artist-credit"]?.[0]?.name || "" : "";

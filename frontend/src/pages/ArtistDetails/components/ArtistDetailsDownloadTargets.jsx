@@ -11,8 +11,11 @@ import { useAlbumTrackListToolbar } from "../../../hooks/useAlbumTrackListToolba
 import { useAudioQueue } from "../../../contexts/audioQueueContext";
 import { normalizePreviewTrack } from "../../../utils/audioQueue";
 
-function PickCover({ pick, albumCovers }) {
-  const cover = getReleaseGroupCoverUrl(pick?.releaseGroup, albumCovers);
+function PickCover({ pick, albumCovers, fulfilledCoverIds, artistCoverImage }) {
+  const cover = getReleaseGroupCoverUrl(pick?.releaseGroup, albumCovers, {
+    artistFallback: artistCoverImage,
+    resolved: fulfilledCoverIds?.has(pick?.releaseGroupId),
+  });
   if (cover) {
     return <img src={cover} alt="" loading="lazy" decoding="async" />;
   }
@@ -37,6 +40,8 @@ export function ArtistDetailsDownloadTargets({
   getAlbumStatus,
   artist,
   albumCovers,
+  fulfilledCoverIds,
+  artistCoverImage,
   canAddAlbum,
   requestingAlbum,
   handleRequestAlbum,
@@ -55,7 +60,10 @@ export function ArtistDetailsDownloadTargets({
     () => buildAurralPick({ releaseGroups, getAlbumStatus }),
     [releaseGroups, getAlbumStatus],
   );
-  const coverSrc = getReleaseGroupCoverUrl(missingReleasePick?.releaseGroup, albumCovers);
+  const coverSrc = getReleaseGroupCoverUrl(missingReleasePick?.releaseGroup, albumCovers, {
+    artistFallback: artistCoverImage,
+    resolved: fulfilledCoverIds?.has(missingReleasePick?.releaseGroupId),
+  });
   const gradientColors = useImageGradientColors(coverSrc);
   const [tracks, setTracks] = useState([]);
   const [loadingTracks, setLoadingTracks] = useState(false);
@@ -214,7 +222,12 @@ export function ArtistDetailsDownloadTargets({
         ) : null}
         <div className="artist-pick-panel__grid">
           <div className="artist-media-cell">
-            <PickCover pick={missingReleasePick} albumCovers={albumCovers} />
+            <PickCover
+              pick={missingReleasePick}
+              albumCovers={albumCovers}
+              fulfilledCoverIds={fulfilledCoverIds}
+              artistCoverImage={artistCoverImage}
+            />
           </div>
           <div className="artist-pick-panel__content">
             <div className="artist-min-0">

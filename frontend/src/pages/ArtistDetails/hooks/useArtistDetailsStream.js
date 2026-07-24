@@ -564,20 +564,26 @@ export function useArtistDetailsStream(
         const covers = await getReleaseGroupCoversBatch(items);
         if (artistMbidRef.current !== batchMbid) return;
         const nextBatch = {};
+        const resolvedIds = [];
         for (const rgId of toFetch) {
           const entry = covers?.[rgId];
           if (entry?.image) {
             nextBatch[rgId] = entry.image;
+            resolvedIds.push(rgId);
+          } else if (!entry?.transientError) {
+            resolvedIds.push(rgId);
           }
         }
         if (Object.keys(nextBatch).length > 0) {
           setAlbumCovers((prev) => ({ ...prev, ...nextBatch }));
         }
-        setFulfilledCoverIds((prev) => {
-          const next = new Set(prev);
-          toFetch.forEach((id) => next.add(id));
-          return next;
-        });
+        if (resolvedIds.length > 0) {
+          setFulfilledCoverIds((prev) => {
+            const next = new Set(prev);
+            resolvedIds.forEach((id) => next.add(id));
+            return next;
+          });
+        }
       } catch {
         if (artistMbidRef.current === batchMbid) {
           setFulfilledCoverIds((prev) => {
@@ -686,5 +692,6 @@ export function useArtistDetailsStream(
     appSettings,
     albumCovers,
     setAlbumCovers,
+    fulfilledCoverIds,
   };
 }
