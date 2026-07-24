@@ -3,7 +3,6 @@ import {
   buildImageProxyUrl,
   isImageProxyLocalUrl,
   resolveImageProxyLocalUrl,
-  warmImageProxy,
 } from "./imageProxyService.js";
 import { getAlbumByMbid, resolveAlbumByArtistAndTitle } from "./providers/brainzmashProvider.js";
 
@@ -59,14 +58,7 @@ const getCachedUrl = (cacheKey) => {
   return undefined;
 };
 
-const warmAndPersistCover = (cacheKey, sourceUrl, proxiedUrl) => {
-  warmImageProxy(sourceUrl)
-    .then((cached) => {
-      if (cached?.localUrl) {
-        dbOps.setImage(cacheKey, cached.localUrl);
-      }
-    })
-    .catch(() => {});
+const persistCover = (cacheKey, proxiedUrl) => {
   dbOps.setImage(cacheKey, proxiedUrl);
 };
 
@@ -79,7 +71,7 @@ const buildReleaseGroupCoverResult = (cacheKey, album) => {
   if (!proxiedUrl) {
     return { imageUrl: null, types: [], notFound: true, transientError: false };
   }
-  warmAndPersistCover(cacheKey, imageUrl, proxiedUrl);
+  persistCover(cacheKey, proxiedUrl);
   return {
     imageUrl: proxiedUrl,
     types: ["Front"],

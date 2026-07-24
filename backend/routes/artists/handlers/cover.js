@@ -1,9 +1,8 @@
 import { UUID_REGEX } from "../../../../lib/uuid.js";
 import { logger } from "../../../services/logger.js";
 import { dbOps } from "../../../db/helpers/index.js";
-import { pendingCoverRequests, fetchCoverInBackground } from "../utils.js";
+import { pendingCoverRequests } from "../utils.js";
 import { getArtistImage } from "../../../services/imageService.js";
-import { warmImageProxy } from "../../../services/imageProxyService.js";
 
 const NEGATIVE_COVER_CACHE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -32,18 +31,8 @@ export function registerCover(router) {
         cachedImage.imageUrl &&
         cachedImage.imageUrl !== "NOT_FOUND"
       ) {
-        logger.info("api", "Cover cache hit", { mbid });        res.set("Cache-Control", "public, max-age=31536000, immutable");
-
-        const cacheAge = cachedImage.cacheAge;
-        const shouldRefresh = !cacheAge || Date.now() - cacheAge > 7 * 24 * 60 * 60 * 1000;
-
-        if (shouldRefresh) {
-          fetchCoverInBackground(mbid, artistNameFromQuery).catch(() => {});
-        }
-        warmImageProxy(cachedImage.imageUrl).catch(() => {
-          dbOps.deleteImage(mbid);
-          fetchCoverInBackground(mbid, artistNameFromQuery).catch(() => {});
-        });
+        logger.info("api", "Cover cache hit", { mbid });
+        res.set("Cache-Control", "public, max-age=31536000, immutable");
 
         const cachedResult = await getArtistImage(mbid, {
           artistName: artistNameFromQuery,
@@ -102,7 +91,8 @@ export function registerCover(router) {
         res.set("Cache-Control", "public, max-age=31536000, immutable");
       } else {
         if (result.notFound) {
-          logger.info("api", "No cover found, caching NOT_FOUND", { mbid });          dbOps.setImage(mbid, "NOT_FOUND");
+          logger.info("api", "No cover found, caching NOT_FOUND", { mbid });
+          dbOps.setImage(mbid, "NOT_FOUND");
           res.set("Cache-Control", "public, max-age=3600");
         } else {
           logger.warn("api", "Cover lookup failed transiently, skipping NOT_FOUND cache", { mbid });

@@ -73,13 +73,6 @@ export const QUEUE_DEFINITIONS = [
     worker: "discovery-user-refresh",
   },
   {
-    queue: "image-prefetch",
-    label: "Image Prefetch",
-    workerLabel: "Image Prefetch Worker",
-    description: "Warms artist and playlist artwork so pages load faster.",
-    worker: "image-prefetch",
-  },
-  {
     queue: "_outbox:notifications",
     label: "Notifications",
     workerLabel: "Notification Worker",
@@ -149,10 +142,6 @@ const PAYLOAD_LABEL_KEY = {
   "discovery-playlist-build": "playlistId",
   "discovery-user-refresh": (p) =>
     p?.listenHistoryProfile?.listenHistoryUsername || null,
-  "image-prefetch": (p) => {
-    const count = Array.isArray(p?.mbids) ? p.mbids.length : 0;
-    return count > 0 ? `${count} artist${count === 1 ? "" : "s"}` : null;
-  },
 };
 
 const PAYLOAD_DETAIL_KEY = {
@@ -180,12 +169,6 @@ const PAYLOAD_DETAIL_KEY = {
     p?.listenHistoryProfile?.listenHistoryUsername
       ? `Refreshes listening history for ${p.listenHistoryProfile.listenHistoryUsername}.`
       : desc,
-  "image-prefetch": (p, desc) => {
-    const count = Array.isArray(p?.mbids) ? p.mbids.length : 0;
-    return count > 0
-      ? `Fetches artwork for ${count} artist${count === 1 ? "" : "s"}.`
-      : desc;
-  },
 };
 
 let schemaEnsured = false;

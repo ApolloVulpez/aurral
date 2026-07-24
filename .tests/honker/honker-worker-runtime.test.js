@@ -42,8 +42,8 @@ test("getHonkerQueueNextClaimAt reports delayed queue work", () => {
 });
 
 test("withJobHeartbeat extends job claim while work runs", async () => {
-  const queue = honkerDb.getImagePrefetchQueue();
-  const jobId = queue.enqueue({ mbids: ["test-mbid"] });
+  const queue = honkerDb.getLibraryScanQueue();
+  const jobId = queue.enqueue({ kind: "heartbeat-test" });
   const job = queue.claimOne(honkerDb.getWorkerId());
   assert.equal(job?.id, jobId);
 
@@ -61,8 +61,8 @@ test("withJobHeartbeat extends job claim while work runs", async () => {
 });
 
 test("withJobHeartbeat records completed task runs", async () => {
-  const queue = honkerDb.getImagePrefetchQueue();
-  const jobId = queue.enqueue({ mbids: ["recorded-mbid"] });
+  const queue = honkerDb.getLibraryScanQueue();
+  const jobId = queue.enqueue({ kind: "recorded-test" });
   const job = queue.claimOne(honkerDb.getWorkerId());
   assert.equal(job?.id, jobId);
 
@@ -74,18 +74,18 @@ test("withJobHeartbeat records completed task runs", async () => {
     (entry) =>
       entry.source === "run" &&
       entry.jobId === jobId &&
-      entry.queue === "image-prefetch",
+      entry.queue === "library-scan",
   );
   assert.equal(recorded?.status, "completed");
-  assert.match(recorded?.name || "", /Image Prefetch/);
+  assert.match(recorded?.name || "", /Library Scan/);
   assert.ok(status.summary);
   assert.equal(status.summary.healthy, true);
   assert.ok(status.summary.completedCount >= 1);
 });
 
 test("task status exposes startedAt and runningForMs for live processing jobs", async () => {
-  const queue = honkerDb.getImagePrefetchQueue();
-  const jobId = queue.enqueue({ mbids: ["live-started-mbid"] });
+  const queue = honkerDb.getLibraryScanQueue();
+  const jobId = queue.enqueue({ kind: "live-started-test" });
   const job = queue.claimOne(honkerDb.getWorkerId());
   assert.equal(job?.id, jobId);
 
@@ -115,8 +115,8 @@ test("task status exposes startedAt and runningForMs for live processing jobs", 
 
 test("task status marks long-running jobs as stale", async () => {
   const { db } = await importFromRepo("backend/config/db-sqlite.js");
-  const queue = honkerDb.getImagePrefetchQueue();
-  const jobId = queue.enqueue({ mbids: ["stale-mbid"] });
+  const queue = honkerDb.getLibraryScanQueue();
+  const jobId = queue.enqueue({ kind: "stale-test" });
   const job = queue.claimOne(honkerDb.getWorkerId());
   assert.equal(job?.id, jobId);
 
@@ -139,9 +139,9 @@ test("task status marks long-running jobs as stale", async () => {
     `,
   ).run(
     jobId,
-    "image-prefetch",
-    "Image Prefetch",
-    JSON.stringify({ mbids: ["stale-mbid"] }),
+    "library-scan",
+    "Library Scan",
+    JSON.stringify({ kind: "stale-test" }),
     honkerDb.getWorkerId(),
     0,
     twoHoursAgo,

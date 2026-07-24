@@ -79,7 +79,7 @@ See [Plex integration](/integrations/plex/).
 
 ## Docker memory looks high after browsing cover art
 
-Official images preload jemalloc so sharp can return freed native memory after optimizing cover art. Cached covers are resized once to card size (512px webp). A restart still resets the working set if you need a clean baseline.
+Official images preload jemalloc so sharp can return freed native memory after optimizing cover art. Covers are fetched on demand (no background prefetch) and cached once as card-sized webp (512px). A restart still resets the working set if you need a clean baseline.
 
 ## Permission errors
 

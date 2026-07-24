@@ -1,8 +1,8 @@
 import { dbOps } from "../db/helpers/index.js";
 import {
+  buildImageProxyUrl,
   isImageProxyLocalUrl,
   resolveImageProxyLocalUrl,
-  warmImageProxy,
 } from "./imageProxyService.js";
 import { getArtistByMbid, listArtistAlbums, searchArtists } from "./providers/brainzmashProvider.js";
 import { fetchReleaseGroupCoverUrl, LEGACY_COVER_HOST_PATTERN } from "./releaseGroupCoverService.js";
@@ -54,6 +54,14 @@ const getAlbumImageKindRank = (image) => {
 
 const getImageUrl = (image) => image?.url || image?.Url || null;
 
+const toPublicImageUrl = (imageUrl) => {
+  if (!imageUrl || imageUrl === "NOT_FOUND") return null;
+  if (isImageProxyLocalUrl(imageUrl)) {
+    return resolveImageProxyLocalUrl(imageUrl) || buildImageProxyUrl(imageUrl);
+  }
+  return buildImageProxyUrl(imageUrl) || imageUrl;
+};
+
 const selectBestImageByKind = (images = [], getKindRank) => {
   if (!Array.isArray(images)) return null;
   return (
@@ -89,7 +97,7 @@ const sortArtistImages = (images = []) => {
     .map((entry) => entry.image);
 };
 
-const buildCachedArtistImagePayload = async (cachedImageUrl, metadataArtist = null) => {
+const buildCachedArtistImagePayload = (cachedImageUrl, metadataArtist = null) => {
   const images = [
     {
       image: cachedImageUrl,
@@ -101,38 +109,34 @@ const buildCachedArtistImagePayload = async (cachedImageUrl, metadataArtist = nu
   const directImages = sortArtistImages(metadataArtist?.images);
 
   for (const image of directImages) {
-    try {
-      const cached = await warmImageProxy(getImageUrl(image));
-      if (!cached?.localUrl || seen.has(cached.localUrl)) continue;
-      seen.add(cached.localUrl);
-      images.push({
-        image: cached.localUrl,
-        front: false,
-        types: [image.kind || image.CoverType || "Artist"],
-      });
-    } catch {}
+    const publicUrl = toPublicImageUrl(getImageUrl(image));
+    if (!publicUrl || seen.has(publicUrl)) continue;
+    seen.add(publicUrl);
+    images.push({
+      image: publicUrl,
+      front: false,
+      types: [image.kind || image.CoverType || "Artist"],
+    });
   }
 
   return images;
 };
 
-const buildDirectArtistImagePayload = async (directImages = []) => {
+const buildDirectArtistImagePayload = (directImages = []) => {
   const sorted = sortArtistImages(directImages);
   const best = sorted[0] || null;
   const images = [];
   const seen = new Set();
 
   for (const image of sorted) {
-    try {
-      const cached = await warmImageProxy(getImageUrl(image));
-      if (!cached?.localUrl || seen.has(cached.localUrl)) continue;
-      seen.add(cached.localUrl);
-      images.push({
-        image: cached.localUrl,
-        front: image === best,
-        types: [image.kind || image.CoverType || "Artist"],
-      });
-    } catch {}
+    const publicUrl = toPublicImageUrl(getImageUrl(image));
+    if (!publicUrl || seen.has(publicUrl)) continue;
+    seen.add(publicUrl);
+    images.push({
+      image: publicUrl,
+      front: image === best,
+      types: [image.kind || image.CoverType || "Artist"],
+    });
   }
 
   return images;
@@ -289,7 +293,7 @@ export const getArtistImage = async (
     const metadataArtist = await getArtistByMbid(resolvedMbid).catch(() => null);
     return {
       url: cachedImage.imageUrl,
-      images: await buildCachedArtistImagePayload(cachedImage.imageUrl, metadataArtist),
+      images: buildCachedArtistImagePayload(cachedImage.imageUrl, metadataArtist),
     };
   }
 
@@ -323,7 +327,7 @@ export const getArtistImage = async (
       const directArtistImage = directArtistImages[0] || null;
 
       if (directArtistImage?.url) {
-        const images = await buildDirectArtistImagePayload(directArtistImages);
+        const images = buildDirectArtistImagePayload(directArtistImages);
         const primaryImage = images.find((image) => image.front) || images[0];
         if (primaryImage?.image) {
           negativeImageCache.delete(mbid);

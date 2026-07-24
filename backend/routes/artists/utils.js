@@ -1,4 +1,3 @@
-import { getArtistImage } from "../../services/imageService.js";
 import { logger } from "../../services/logger.js";
 
 export const sendSSE = (res, event, data) => {
@@ -28,24 +27,4 @@ export const buildArtistRequestKey = ({
   const limitValue = Number.parseInt(appearsOnLimit, 10);
   const limitKey = Number.isFinite(limitValue) && limitValue > 0 ? String(limitValue) : "";
   return [String(mbid || "").trim(), mode, releaseTypesKey, limitKey].join(":");
-};
-
-export const fetchCoverInBackground = async (mbid, artistName = null) => {
-  if (pendingCoverRequests.has(mbid)) return;
-
-  const fetchPromise = (async () => {
-    try {
-      await getArtistImage(mbid, {
-        forceRefresh: true,
-        artistName,
-      });
-    } catch (e) {}
-  })();
-
-  pendingCoverRequests.set(mbid, fetchPromise);
-  try {
-    await fetchPromise;
-  } finally {
-    pendingCoverRequests.delete(mbid);
-  }
 };

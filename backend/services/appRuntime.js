@@ -7,7 +7,6 @@ import {
 } from "./honkerDb.js";
 import { startSystemTaskWorker } from "./systemTaskWorker.js";
 import { startLibraryScanWorker } from "./libraryScanWorker.js";
-import { startImagePrefetchWorker } from "./imagePrefetchWorker.js";
 import { startNotificationOutboxWorker } from "./notificationOutboxWorker.js";
 import { startSlskdOrchestratorWorker } from "./slskdOrchestratorWorker.js";
 import { startDiscoveryRefreshWorker } from "./discoveryRefreshWorker.js";
@@ -33,7 +32,6 @@ const WORKER_SUPERVISOR_POLL_MS = Math.max(
 const WORKER_STARTS = {
   "system-task": startSystemTaskWorker,
   "library-scan": startLibraryScanWorker,
-  "image-prefetch": startImagePrefetchWorker,
   "_outbox:notifications": startNotificationOutboxWorker,
   "slskd-pipeline": startSlskdOrchestratorWorker,
   "discovery-refresh": startDiscoveryRefreshWorker,

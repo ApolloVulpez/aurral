@@ -14,7 +14,6 @@ export const HONKER_QUEUE_NAMES = [
   "discovery-refresh",
   "discovery-playlist-build",
   "discovery-user-refresh",
-  "image-prefetch",
   "_outbox:notifications",
 ];
 
@@ -267,16 +266,6 @@ const libraryScan = registerQueue({
 
 export const getLibraryScanQueue = libraryScan.getQueue;
 export const enqueueLibraryScanJob = libraryScan.enqueueJob;
-
-const imagePrefetch = registerQueue({
-  name: "image-prefetch",
-  visibilityTimeoutS: 600,
-  maxAttempts: 4,
-  workerModule: "./imagePrefetchWorker.js",
-  workerStartFn: "startImagePrefetchWorker",
-});
-
-export const getImagePrefetchQueue = imagePrefetch.getQueue;
 
 export function getNotificationOutbox() {
   if (!notificationOutbox) {
