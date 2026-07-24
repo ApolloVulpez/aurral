@@ -15,10 +15,9 @@ const FETCH_TIMEOUT_MS = 25000;
 const MAX_REDIRECTS = 5;
 const MAX_SOURCE_IMAGE_BYTES = 25 * 1024 * 1024;
 const MAX_SOURCE_IMAGE_PIXELS = 40_000_000;
-const OPTIMIZED_IMAGE_MAX_BYTES = 1024 * 1024;
-const DEFAULT_WEBP_QUALITY = 70;
-const FALLBACK_WEBP_QUALITIES = [70, 60, 50, 40];
-const FALLBACK_MAX_DIMENSIONS = [null, 1600, 1400, 1200, 1000, 800];
+const CARD_IMAGE_MAX_PX = 512;
+const CARD_IMAGE_MAX_BYTES = 150 * 1024;
+const WEBP_QUALITY = 70;
 const inflightRequests = new Map();
 const cacheEntriesByKey = new Map();
 const cacheKeysBySourceUrl = new Map();
@@ -369,7 +368,7 @@ const shouldNormalizeCachedEntry = (entry) => {
   if (!OPTIMIZABLE_CONTENT_TYPES.has(entry.meta.contentType)) return false;
   return (
     entry.meta.contentType !== "image/webp" ||
-    Number(entry.meta.size || 0) > OPTIMIZED_IMAGE_MAX_BYTES
+    Number(entry.meta.size || 0) > CARD_IMAGE_MAX_BYTES
   );
 };
 
@@ -394,77 +393,26 @@ const inspectImageBuffer = async (buffer, contentType) => {
   return metadata;
 };
 
-const optimizeImageBuffer = async (buffer, contentType, inspectedMetadata = null) => {
+const optimizeImageBuffer = async (buffer, contentType) => {
   if (!OPTIMIZABLE_CONTENT_TYPES.has(contentType)) {
-    return {
-      buffer,
-      contentType,
-    };
+    return { buffer, contentType };
   }
 
-  const metadata =
-    inspectedMetadata ||
-    (await sharp(buffer, {
-      animated: false,
-      limitInputPixels: MAX_SOURCE_IMAGE_PIXELS,
-    }).metadata());
+  const optimizedBuffer = await sharp(buffer, {
+    animated: false,
+    limitInputPixels: MAX_SOURCE_IMAGE_PIXELS,
+  })
+    .rotate()
+    .resize({
+      width: CARD_IMAGE_MAX_PX,
+      height: CARD_IMAGE_MAX_PX,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
+    .webp({ quality: WEBP_QUALITY })
+    .toBuffer();
 
-  const largestDimension = Math.max(metadata?.width || 0, metadata?.height || 0);
-  const dimensionSteps = FALLBACK_MAX_DIMENSIONS.filter(
-    (dimension) => dimension === null || largestDimension > dimension,
-  );
-  if (dimensionSteps.length === 0) {
-    dimensionSteps.push(null);
-  }
-
-  let bestCandidate = null;
-
-  for (const maxDimension of dimensionSteps) {
-    for (const quality of FALLBACK_WEBP_QUALITIES) {
-      let candidate = sharp(buffer, {
-        animated: false,
-        limitInputPixels: MAX_SOURCE_IMAGE_PIXELS,
-      }).rotate();
-      if (maxDimension) {
-        candidate = candidate.resize({
-          width: maxDimension,
-          height: maxDimension,
-          fit: "inside",
-          withoutEnlargement: true,
-        });
-      }
-
-      const optimizedBuffer = await candidate
-        .webp({
-          quality,
-          effort: 4,
-        })
-        .toBuffer();
-
-      if (!bestCandidate || optimizedBuffer.length < bestCandidate.buffer.length) {
-        bestCandidate = {
-          buffer: optimizedBuffer,
-          contentType: "image/webp",
-        };
-      }
-
-      if (quality === DEFAULT_WEBP_QUALITY && optimizedBuffer.length <= OPTIMIZED_IMAGE_MAX_BYTES) {
-        return {
-          buffer: optimizedBuffer,
-          contentType: "image/webp",
-        };
-      }
-
-      if (optimizedBuffer.length <= OPTIMIZED_IMAGE_MAX_BYTES) {
-        return {
-          buffer: optimizedBuffer,
-          contentType: "image/webp",
-        };
-      }
-    }
-  }
-
-  return bestCandidate || { buffer, contentType };
+  return { buffer: optimizedBuffer, contentType: "image/webp" };
 };
 
 const normalizeCachedEntryIfNeeded = async (entry) => {
@@ -585,11 +533,7 @@ const fetchAndCacheImage = async (sourceUrl) => {
   }
 
   const sourceImage = await fetchRemoteImage(normalizedSourceUrl);
-  const optimized = await optimizeImageBuffer(
-    sourceImage.buffer,
-    sourceImage.contentType,
-    sourceImage.metadata,
-  );
+  const optimized = await optimizeImageBuffer(sourceImage.buffer, sourceImage.contentType);
 
   return writeCacheEntry(
     hashValue(normalizedSourceUrl),
