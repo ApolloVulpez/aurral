@@ -30,7 +30,7 @@ Most setup happens in the web UI. These variables matter for Docker deployments.
 | `AUTH_PROXY_HEADER` | Custom header containing the authenticated username. |
 | `AUTH_PROXY_DOMAIN` | Origin of your forwardAuth login page (e.g. `https://auth.example.com`). Needed for Authelia-style setups so CSP allows the login redirect and session reauth can finish. |
 | `AUTH_PROXY_TRUSTED_IPS` | Comma-separated proxy IP allowlist for auth headers. Required when proxy auth is on — without it, any client that can reach Aurral directly can impersonate users via the identity header. |
-| `AUTH_PROXY_LOGOUT_URL` | Your proxy/IdP's logout endpoint (e.g. `https://auth.example.com/logout`). When set, logging out of Aurral also redirects there to end the proxy-level session, not just the local one. |
+| `AUTH_PROXY_LOGOUT_URL` | Your proxy/IdP's logout endpoint. For Authentik single-application forward auth, use `https://aurral.example.com/outpost.goauthentik.io/sign_out`. When set, logging out of Aurral also ends the proxy-level session. |
 | `AUTH_PROXY_DEFAULT_ROLE` | Role assigned to proxy-auth users who aren't otherwise granted admin: `user` or `admin`. Re-evaluated on every request. |
 | `AUTH_PROXY_ADMIN_USERS` | Comma-separated usernames always granted admin. Re-checked on every request, so removing a username here demotes them on their next request. |
 | `AUTH_PROXY_ROLE_HEADER` | Optional header containing the user's group membership (e.g. Authelia's `Remote-Groups`), typically a comma-separated list. Checked against `AUTH_PROXY_ADMIN_GROUPS` on every request. |

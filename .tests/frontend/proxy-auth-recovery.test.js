@@ -34,7 +34,7 @@ test("bearer-authenticated bootstrap does not enable proxy auth", async (t) => {
   assert.equal(isProxyAuthActive(), false);
 });
 
-test("proxy-auth API 401 navigates the top-level page through the reauth route", async (t) => {
+test("proxy-auth API 401 navigates through a fixed reauth route", async (t) => {
   const originalGlobals = {
     fetch: globalThis.fetch,
     localStorage: globalThis.localStorage,
@@ -55,14 +55,7 @@ test("proxy-auth API 401 navigates the top-level page through the reauth route",
 
   globalThis.sessionStorage = createStorage({ "aurral:proxy-auth": "1" });
   globalThis.localStorage = createStorage();
-  globalThis.window = {
-    location: {
-      origin: "https://aurral.example.com",
-      pathname: "/discover",
-      search: "",
-      href: "https://aurral.example.com/discover",
-    },
-  };
+  globalThis.window = { location: { origin: "https://aurral.example.com" } };
   globalThis.fetch = async () =>
     new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
       status: 401,
@@ -71,15 +64,26 @@ test("proxy-auth API 401 navigates the top-level page through the reauth route",
 
   const { default: api } = await vite.ssrLoadModule("/src/utils/api/core.js");
 
-  await assert.rejects(api.get("/discover"), /status code 401/);
-  assert.equal(
-    globalThis.window.location.href,
-    "/api/auth/reauth?returnTo=%2Fdiscover",
-  );
+  for (const [pathname, search] of [
+    ["/discover", ""],
+    [
+      "/outpost.goauthentik.io/start",
+      "?rd=https%3A%2F%2Faurral.example.com%2Fapi%2Fauth%2Freauth%3FreturnTo%3D%252Fdiscover",
+    ],
+  ]) {
+    Object.assign(globalThis.window.location, {
+      pathname,
+      search,
+      href: `https://aurral.example.com${pathname}${search}`,
+    });
+    await assert.rejects(api.get("/discover"), /status code 401/);
+    assert.equal(globalThis.window.location.href, "/api/auth/reauth");
+  }
 });
 
-test("proxy-auth WebSocket 4401 navigates the top-level page through the reauth route", async (t) => {
+test("proxy-auth WebSocket closure probes ambiguous failures before navigating", async (t) => {
   const originalGlobals = {
+    fetch: globalThis.fetch,
     localStorage: globalThis.localStorage,
     sessionStorage: globalThis.sessionStorage,
     WebSocket: globalThis.WebSocket,
@@ -113,16 +117,26 @@ test("proxy-auth WebSocket 4401 navigates the top-level page through the reauth 
     "/src/hooks/useWebSocket.js",
   );
 
-  assert.equal(recoverProxyAuthFromWebSocketClose({ code: 1006 }), false);
+  globalThis.fetch = async () => {
+    throw new TypeError("Network error");
+  };
+  assert.equal(await recoverProxyAuthFromWebSocketClose({ code: 1006 }), false);
   assert.equal(
     globalThis.window.location.href,
     "https://aurral.example.com/discover",
   );
-  assert.equal(recoverProxyAuthFromWebSocketClose({ code: 4401 }), true);
-  assert.equal(
-    globalThis.window.location.href,
-    "/api/auth/reauth?returnTo=%2Fdiscover",
-  );
+
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
+  assert.equal(await recoverProxyAuthFromWebSocketClose({ code: 1006 }), true);
+  assert.equal(globalThis.window.location.href, "/api/auth/reauth");
+
+  globalThis.window.location.href = "https://aurral.example.com/discover";
+  assert.equal(await recoverProxyAuthFromWebSocketClose({ code: 4401 }), true);
+  assert.equal(globalThis.window.location.href, "/api/auth/reauth");
 });
 
 test("a late close from an old WebSocket cannot orphan its replacement", async (t) => {

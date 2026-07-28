@@ -37,8 +37,7 @@ export const forceProxyReauthNavigation = () => {
     return;
   }
   clearAuthStorage();
-  const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
-  window.location.href = `${API_BASE_URL}/auth/reauth?returnTo=${returnTo}`;
+  window.location.href = `${API_BASE_URL}/auth/reauth`;
 };
 
 const forceReloadForLogin = () => {

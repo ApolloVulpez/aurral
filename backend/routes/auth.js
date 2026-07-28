@@ -45,11 +45,7 @@ router.post("/login", async (req, res) => {
   }
 });
 
-router.get("/reauth", (req, res) => {
-  const returnTo = String(req.query.returnTo || "");
-  const target = returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/";
-  res.redirect(302, target);
-});
+router.get("/reauth", (_req, res) => res.redirect(302, "/"));
 
 router.post("/logout", requireAuth, (req, res) => {
   const token = getBearerToken(req);
