@@ -5,7 +5,7 @@ description: Mount Aurral like Lidarr. Same media root, same path view.
 
 Aurral is a **Lidarr companion**. Storage follows Lidarr, not a separate Aurral layout.
 
-If Lidarr already downloads and your player already sees Lidarr's library, mount that same media root into Aurral. The filesystem side is done.
+If Lidarr downloads and your player sees its library, mount that same media root into Aurral. This completes the filesystem setup.
 
 ## The rule
 
@@ -28,9 +28,12 @@ For path planning, hardlinks, and permissions, use the Servarr guides:
 
 1. In **Settings → Download Clients → Downloads Folder → Path**, set a folder under that root (for example `/data/downloads/aurral`).
 2. Connect Lidarr and run **Test library access**.
-3. If you use a player, add Aurral's downloads path as a music folder (Navidrome) or let Aurral register it (Plex). Scanning Lidarr's library alone does not include Aurral's output.
+3. If you use Navidrome, add Aurral's downloads path as a music folder.
+4. If you use Plex, let Aurral register the downloads path.
 
-yt-dlp writes straight into that downloads path. If Lidarr already shares `/data` with slskd or Usenet, Aurral sees those completed folders too once you connect the clients in Settings.
+A scan of only the Lidarr library does not include Aurral output.
+
+yt-dlp writes directly into that downloads path. If Lidarr shares `/data` with slskd or Usenet, Aurral can see the completed folders.
 
 ## Example layout
 
@@ -48,10 +51,10 @@ This is the usual Servarr-style tree. Yours can differ as long as every containe
 
 | Service        | Mount            | Notes                                               |
 | -------------- | ---------------- | --------------------------------------------------- |
-| Lidarr         | `/data:/data`    | Root folder e.g. `/data/music`                      |
-| Aurral         | `/data:/data`    | Same mount; set Downloads Folder in the UI          |
-| slskd          | `/data:/data`    | Same mount Lidarr already uses                      |
-| SABnzbd/NZBGet | `/data:/data`    | Same mount Lidarr already uses                      |
+| Lidarr         | `/data:/data`    | Root folder, for example, `/data/music`              |
+| Aurral         | `/data:/data`    | Same mount. Set Downloads Folder in the UI.          |
+| slskd          | `/data:/data`    | Same mount that Lidarr uses                         |
+| SABnzbd/NZBGet | `/data:/data`    | Same mount that Lidarr uses                         |
 | Navidrome      | `/data:/data:ro` | Scan Lidarr library **and** Aurral's downloads path |
 | Plex           | `/data:/data`    | Reads Aurral's `aurral-weekly-flow` tree            |
 
@@ -71,12 +74,14 @@ services:
       - ./config:/config
 ```
 
-Example mapping: remote `N:/ServerFolders/Music` to local `/music`. You can also set `PATH_MAPPINGS=N:/ServerFolders/Music|/music` in compose (applied at runtime; edit in the UI afterward).
+Example mapping: map the remote path `N:/ServerFolders/Music` to the local path `/music`.
+
+You can also set `PATH_MAPPINGS=N:/ServerFolders/Music|/music` in the Compose file. Aurral applies it at runtime. Edit it in the UI afterward.
 
 Then run **Settings → Lidarr → Test library access**.
 
 :::note
-Compose `PATH_MAPPINGS` do not appear as env fields in the UI. Use **Settings → Download Clients → Remote Path Mappings** to view or edit them.
+Compose `PATH_MAPPINGS` do not appear as environment fields in the UI. Use **Settings → Download Clients → Remote Path Mappings** to view or edit them.
 :::
 
 ## When the player sees different paths

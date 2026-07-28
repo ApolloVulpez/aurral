@@ -3,7 +3,7 @@ title: Flows
 description: Schedule, source mix, focus, and flow generation behavior.
 ---
 
-Flows are dynamic playlists. They regenerate on their schedule, download into Aurral's own folder, and can be exposed to Navidrome or Plex.
+Flows are dynamic playlists. They regenerate on their schedule and download files into Aurral's folder. Aurral can send them to Navidrome or Plex.
 
 ![Aurral flow editor](../../../assets/screenshots/flow-editor.webp)
 
@@ -13,14 +13,14 @@ A flow has three layers:
 
 1. **Schedule** — when the flow runs
 2. **Source mix** — where tracks come from
-3. **Focus inputs** — what the Focus source should try to match
+3. **Focus inputs** — what the Focus source tries to match
 
 ## Schedule
 
 - **Tracks** sets the playlist size.
-- **Update days** chooses which days the flow may run.
+- **Update days** selects the days when the flow can run.
 - **Update hour** chooses the hour for those runs.
-- A flow only starts generating when it is enabled. A disabled flow saves its settings but will not run.
+- A flow starts only when you enable it. A disabled flow keeps its settings but does not run.
 
 ## Source mix
 
@@ -28,12 +28,12 @@ Source mix controls where tracks come from.
 
 | Source   | Behavior                                                                  |
 | -------- | ------------------------------------------------------------------------- |
-| Discover | Aurral's recommendation pool; excludes library and blocked artists        |
-| Library  | Artists from your library; the only source allowed to use library artists |
-| Trending | Broader trending pools; excludes library and blocked artists              |
-| Focus    | Non-library artists matching your tags; excludes blocked artists          |
+| Discover | Aurral's recommendation pool. It excludes library and blocked artists. |
+| Library  | Artists from your library. Only this source can use library artists.   |
+| Trending | Broader trending pools. It excludes library and blocked artists.       |
+| Focus    | Non-library artists that match your tags. It excludes blocked artists. |
 
-The mix slider is shared across enabled sources:
+Enabled sources use one mix slider:
 
 - With all four sources on, it behaves like a four-way mix.
 - With two sources on, it collapses into a two-way split.
@@ -51,7 +51,9 @@ Turning a source off removes it from the mix entirely. Turning it on adds it bac
 
 ## Deep dive
 
-Deep dive changes how far Aurral looks when pulling candidates. **Off** prefers well-known tracks from highly-seeded sources. **On** reaches deeper into less popular catalog, pulling tracks from artists with fewer listeners and lower general availability. It does not change the schedule or source percentages.
+Deep dive changes which tracks Aurral selects from each artist. **Off** starts with the top 10 tracks. **On** starts with tracks ranked 10 through 25.
+
+Deep dive requires a Last.fm API key. It does not change the schedule or source percentages.
 
 ## Focus
 
@@ -59,8 +61,8 @@ Focus is a dedicated fourth source. It does not bend Discover, Library, or Trend
 
 - **Genre tags** tell Focus which genres to target.
 - **Related artists** tell Focus which similarity seeds to target.
-- If Focus is enabled, at least one genre tag or related artist is required.
-- If Focus is disabled, your tags and artists stay saved but are inactive.
+- If you enable Focus, add at least one genre tag or related artist.
+- If you disable Focus, Aurral saves your tags and artists but does not use them.
 
 ### Focus matching behavior
 
@@ -81,7 +83,9 @@ Multiple tags prefer overlap first. `acoustic, sad` tries artists matching both 
 
 ### Focus input behavior
 
-Enter multiple tags or artists separated by commas. Entries tokenize when separated by a comma or when the field loses focus. Duplicates are ignored.
+Use commas to separate multiple tags or artists. Aurral converts the text to entries after a comma or after you leave the field.
+
+Aurral ignores duplicate entries.
 
 ## Fallback behavior
 
@@ -102,13 +106,13 @@ When a flow runs, Aurral:
 1. Calculates the track count target
 2. Calculates source counts from the current source mix
 3. Harvests oversized candidate pools inside each enabled source
-4. Builds a dedicated Focus pool if Focus is enabled
+4. Builds a dedicated Focus pool when you enable Focus
 5. Picks the primary playlist with a strict one-song-per-artist rule
 6. Redistributes any source shortfalls across the other enabled sources
 7. Builds a reserve pool from the same run for fast replacements
 8. Sends the primary playlist into the download worker
 
-Only flows may generate replacement tracks when downloads fail. See [Playlist imports](/using/playlist-imports/) for static playlist retry behavior.
+Only flows can generate replacement tracks when downloads fail. See [Playlist imports](/using/playlist-imports/) for static playlist retry behavior.
 
 ## Lidarr import list
 

@@ -58,7 +58,7 @@ Commit the resulting `package.json` and `package-lock.json` changes with the fea
    ./scripts/deploy-channel.sh test feat/short-description
    ```
 
-7. If testing finds a problem, fix the working branch and repeat both deployments. The script will not promote a commit to `test` unless `dev` already points to it.
+7. If testing finds a problem, fix the working branch and repeat both deployments. The script promotes only commits that `dev` points to.
 8. Give the PR a Conventional Commit title such as `feat: add playlist sharing` or `fix: prevent duplicate imports`.
 9. Complete the PR checklist and use **Squash and merge**.
 10. Delete the working branch. GitHub normally does this automatically.
@@ -76,12 +76,12 @@ These tags drive the update banner for each prerelease channel. They are not Git
 
 Merging a PR does not publish a release.
 
-1. Confirm the intended code is on `main` and CI passed.
-2. Confirm the root package version is correct and has not already been published.
+1. Make sure that the intended code is on `main` and CI passed.
+2. Make sure that the root package version is correct and you did not publish it before.
 3. Open **Actions → Stable Release → Run workflow**.
 4. Select `main` and enter the exact package version without `v`, for example `2.1.0`.
 5. Watch the workflow through validation, image publication, annotated tag creation, and GitHub Release publication.
-6. Confirm the exact version and moving aliases exist:
+6. Make sure that the exact version and moving aliases exist:
 
    ```text
    ghcr.io/lklynet/aurral:2.1.0

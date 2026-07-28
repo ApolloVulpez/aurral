@@ -12,18 +12,18 @@ Two delivery methods are available. You can use one or both.
 Gotify is a self-hosted push notification server. Configure it in **Settings → Connect**.
 
 Provide:
-- **Server URL** — the base URL Aurral can reach (e.g. `http://gotify:8888` in Docker)
+- **Server URL** — the base URL Aurral can reach (for example, `http://gotify:8888` in Docker)
 - **App token** — create an application in Gotify and copy its token
 
 Toggle which events fire:
 - **Notify when discovery updates** — sends a notification when the daily recommendation refresh finishes
 - **Notify when weekly flow finishes** — sends a notification with the number of completed and failed tracks
 
-Click **Test** on the Gotify card to verify connectivity.
+Click **Test notification** on the Gotify card to verify connectivity.
 
 ## Webhooks
 
-Webhooks fire an HTTP request for each enabled event. Configure them under **Settings → Connect** in the **Webhook Events** section.
+Webhooks send an HTTP request for each enabled event. Configure them in the **Webhooks** section under **Settings → Connect**.
 
 Each webhook has:
 - **URL** — the endpoint to call (must start with `http://` or `https://`)
@@ -34,4 +34,4 @@ Toggle which events fire for your webhooks:
 - **Notify when discovery updates**
 - **Notify when weekly flow finishes**
 
-Events that are toggled off do not fire, even if you have webhook URLs configured.
+Aurral does not send events that you turn off, even if you configured webhook URLs.

@@ -3,7 +3,9 @@ title: Navidrome
 description: Stream generated playlists and flow libraries.
 ---
 
-Navidrome is optional, but it is the cleanest way to play generated flows and imported playlists. Aurral creates a separate **aurral-weekly-flow** library and writes M3U playlists for your flows and static playlists.
+Navidrome is optional. Aurral creates an **Aurral Playlists** library at the `aurral-weekly-flow` path.
+
+Aurral also writes M3U playlists for your flows and static playlists.
 
 ![Aurral in-app playback](../../../assets/screenshots/playback.webp)
 
@@ -14,7 +16,7 @@ Navidrome is optional, but it is the cleanest way to play generated flows and im
 3. Connect Navidrome in **Settings → Playback → Navidrome**.
 4. Let Aurral create or update its generated library and playlist files under `aurral-weekly-flow`.
 
-Navidrome talking to Aurral is API-only. Playback still needs Navidrome to see the files on disk.
+Aurral configures Navidrome through its API. Navidrome must also have access to the audio files on disk.
 
 ## Mixed Windows and Docker Navidrome
 
@@ -30,7 +32,9 @@ Aurral writes M3U playlists under `aurral-weekly-flow` with one track path per l
 
 With path mappings, Aurral translates Lidarr's Windows paths into container paths so it can read files. For example, `N:\ServerFolders\Music\Music\Artist\track.mp3` becomes `/music/Music/Artist/track.mp3` inside Docker.
 
-By default, M3U files use Aurral's container paths. Navidrome cannot resolve `/music/...` if it runs natively on Windows, or if its container mounts the same files at a different path. Playlists may appear but tracks fail to play.
+By default, M3U files use Aurral's container paths. Navidrome cannot resolve `/music/...` if it runs natively on Windows.
+
+This also occurs if its container mounts the same files at a different path. Playlists can appear, but tracks do not play.
 
 **Use Navidrome paths in M3U files** (or `M3U_PATH_MODE=remote`) changes paths only when writing M3U files. Aurral still uses container paths internally for file checks, reuse, and repairs.
 
@@ -61,5 +65,9 @@ ND_SCANNER_PURGEMISSING=always
 ```
 
 Purging missing tracks helps Navidrome clean up old flow entries after a flow rotates.
+
+:::caution
+This setting also removes other missing Navidrome files and their ratings, play counts, and playlist entries. Use it only when missing files will not return.
+:::
 
 For Plex and Plexamp instead, see [Plex](/integrations/plex/).

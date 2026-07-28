@@ -7,7 +7,7 @@ Imported playlists are separate from flows.
 
 - They do not regenerate on a schedule.
 - They do not use source mix, focus filters, or deep dive.
-- They keep the exact tracklist they were imported with.
+- They keep the exact imported tracklist.
 - They can reuse completed Aurral tracks or existing Lidarr files when worker settings allow.
 
 ![Aurral playlist import](../../../assets/screenshots/playlist-import.webp)
@@ -22,7 +22,7 @@ The fastest path is in-app import on **Playlists**.
 
 During import you can set a display name and a sync schedule. Sync re-fetches the Spotify tracklist and queues new tracks. Choose **None** for a fixed snapshot. Change sync later from the playlist menu.
 
-The connection is stored per Aurral user. Use **Disconnect** in the import modal to revoke access.
+Aurral stores the connection for each user. Use **Disconnect** in the import modal to revoke access.
 
 Allow the OAuth popup if your browser blocks it. Self-hosted instances need `oauth.html` reachable on the same origin Aurral serves.
 
@@ -115,7 +115,7 @@ Minimum shape:
 
 ### Raw array of tracks
 
-A top-level array of track objects is treated as one playlist. This is what the CSV converter generates.
+Aurral treats a top-level array of track objects as one playlist. The CSV converter generates this format.
 
 ```json
 [
@@ -154,30 +154,36 @@ A top-level array of track objects is treated as one playlist. This is what the 
 
 ## Import notes
 
-- A top-level array of track objects is treated as one playlist.
-- A top-level array of playlist objects is treated as multiple playlists.
+- Aurral treats a top-level array of track objects as one playlist.
+- Aurral treats a top-level array of playlist objects as multiple playlists.
 - If an imported playlist name conflicts with an existing playlist, Aurral renames it automatically.
 - Imported playlists queue their own downloads and do not affect any flow configuration.
-- When existing file reuse succeeds, the imported track is marked complete immediately.
+- When existing file reuse succeeds, Aurral immediately marks the imported track as complete.
 
 ## Download retries and failure behavior
 
 Imported playlists behave differently from flows when downloads fail:
 
-- Each imported track is queued as its own worker job.
-- The active download pipeline may try multiple candidates and configured sources.
-- After those options are exhausted, the track remains failed across worker and container restarts.
+- Aurral queues each imported track as a separate worker job.
+- The active download pipeline can try multiple candidates and configured sources.
+- After Aurral exhausts those options, the track stays in the failed state across worker and container restarts.
 - Choose **Re-search missing** from the playlist menu to explicitly queue failed tracks again.
-- Only flows may generate replacement tracks.
+- Only flows can generate replacement tracks.
 
 ## Existing file reuse
 
 Aurral reuses one file across playlists instead of downloading again. Add a flow find to a static playlist and both point at the same file until the flow refreshes. On refresh, Aurral moves still-referenced files into the static playlist before wiping the flow folder, then builds the new flow.
 
-Static playlists and Lidarr are preferred when both exist. Multiple playlists may share one path; removing a playlist relocates survivors first so Navidrome does not see duplicates.
+Aurral prefers static playlists and Lidarr when both exist. Multiple playlists can share one path.
+
+Before Aurral removes a playlist, it relocates the remaining references. Thus, Navidrome does not show duplicates.
 
 Lidarr-aware reuse requires Aurral to read the files at the paths Lidarr reports. Match Lidarr's media mount (for example `/data:/data` with root `/data/music`). See [Match Lidarr](/getting-started/storage/).
 
-If Lidarr runs on Windows and Aurral runs in Docker, run **Test library access** in **Settings → Lidarr** to see the exact reported path, then add a mapping under **Settings → Download Clients → Remote Path Mappings**.
+If Lidarr runs on Windows and Aurral runs in Docker, run **Test library access** in **Settings → Lidarr**.
 
-When reuse points at Lidarr files and Navidrome sees those files at a different path than Aurral, enable **Use Navidrome paths in M3U files** and add a Navidrome path mapping so `.m3u` files reference paths Navidrome can open. See [Navidrome](/integrations/navidrome/#mixed-windows-and-docker-navidrome).
+Use the reported path to add a mapping under **Settings → Download Clients → Remote Path Mappings**.
+
+If Navidrome uses a different path for reused Lidarr files, enable **Use Navidrome paths in M3U files**.
+
+Add a Navidrome path mapping so `.m3u` files use paths that Navidrome can open. See [Navidrome](/integrations/navidrome/#mixed-windows-and-docker-navidrome).

@@ -3,7 +3,7 @@ title: Self-hosting music
 description: A practical guide to building a discovery-first music stack with Lidarr, Aurral, Navidrome, and slskd.
 ---
 
-A friendly starting point for homelabbers who want a clean music stack: Lidarr for the permanent library, Aurral as the Lidarr companion for discovery, Navidrome for streaming, and Tailscale for private access.
+This guide describes a self-hosted music stack. It uses Lidarr, Aurral, Navidrome, and Tailscale.
 
 ## At a glance
 
@@ -32,8 +32,8 @@ Self-hosting music works best when each tool has a narrow job.
 
 Keep these separate in your head:
 
-1. **Library albums**: Lidarr (optionally with Tubifarry + slskd as indexer and download client) pulls full albums into `/data/music`.
-2. **Flows and playlists**: Aurral downloads via yt-dlp, slskd, and/or Usenet into its Downloads Folder under `aurral-weekly-flow/`.
+1. **Library albums**: Lidarr pulls full albums into `/data/music`. If necessary, use Tubifarry and slskd as the indexer and download client.
+2. **Flows and playlists**: Aurral uses yt-dlp, slskd, or Usenet to download files into `aurral-weekly-flow/` under its Downloads Folder.
 
 Aurral does not route flow downloads through Lidarr. Mount Aurral like Lidarr ([Match Lidarr](/getting-started/storage/)). They can share the same slskd instance but serve different jobs.
 
@@ -43,9 +43,9 @@ Tubifarry requires [Lidarr nightly](https://github.com/Lidarr/Lidarr) for plugin
 
 ## The guiding idea
 
-The biggest mistake in self-hosted music is treating discovery as collection. Every saved album becomes storage, metadata, scans, backups, and maintenance. Let discovery stay temporary until the music proves it deserves to be permanent.
+Do not treat all discovered music as a permanent collection. Each saved album needs storage, metadata, scans, backups, and maintenance.
 
-Aurral gives that temporary layer a real home. It surfaces new artists, builds rotating flows, imports outside playlists, and writes generated tracklists into its own folder instead of dumping every find into the main music library.
+Aurral keeps temporary music separate. It finds new artists, builds flows, imports playlists, and writes generated tracklists to its own folder.
 
 **Practical rules:**
 
@@ -85,13 +85,13 @@ For **Aurral flows and playlists**, connect download clients in **Settings → D
 
 - **yt-dlp** for YouTube/web fallback: enabled by default when `yt-dlp` and ffmpeg are available. No separate daemon. See [yt-dlp](/integrations/ytdlp/).
 - **slskd** for Soulseek: Aurral sends searches, selects the best candidate, and moves completed files into your Downloads Folder.
-- **Prowlarr + SABnzbd/NZBGet** for Usenet: Aurral searches indexers via Prowlarr, queues NZBs, and imports completed files the same way. See [Usenet](/integrations/usenet/).
+- **Prowlarr + SABnzbd/NZBGet** for Usenet: Aurral uses Prowlarr to search indexers. It queues NZBs and imports completed files. See [Usenet](/integrations/usenet/).
 
 You can run any combination and set **source priority** so Aurral falls back when one source fails.
 
 ### Same mount, different jobs
 
-If Lidarr already shares `/data` with slskd or Usenet, Aurral only needs that same mount:
+If Lidarr shares `/data` with slskd or Usenet, Aurral needs only that same mount:
 
 - Lidarr library: `/data/music`
 - slskd finished downloads: `/data/downloads/slskd/complete`
@@ -126,7 +126,8 @@ Aurral works best when it connects the stack without trying to own every part of
 4. Build one or more [flows](/using/flows/) for regular listening.
 5. Listen in Navidrome or Amperfy.
 6. Move standout tracks into a [static Aurral playlist](/using/playlist-imports/). Connect Spotify in-app or import JSON.
-7. Add full albums to Lidarr only when they clearly earn it. Flows can also feed Lidarr via a [custom import list URL](/integrations/lidarr/#import-list-feeds).
+7. Add full albums to Lidarr only when you want to keep them.
+8. If necessary, use a [custom import list URL](/integrations/lidarr/#import-list-feeds) to send flow data to Lidarr.
 
 ## Flow strategy
 
@@ -135,7 +136,7 @@ Treat flows like radio stations you control. Start with a small number of useful
 | Flow idea        | Recipe                                                     |
 | ---------------- | ---------------------------------------------------------- |
 | Weekly discovery | Balanced mix of Discover, Trending, and Focus              |
-| Library adjacent | Related picks connected to artists already in your library |
+| Library adjacent | Related picks connected to artists in your library         |
 | Deep cuts        | Adventurous tags and related artists, with Deep Dive on    |
 | Comfort rotation | Mostly Library with a small amount of Discover             |
 
@@ -143,13 +144,15 @@ You can also adopt discover playlists such as **Release Radar** from the Discove
 
 Keep flow sizes moderate, roughly 25 to 75 tracks. Schedule them weekly unless you listen through them faster. Use Focus when you know the mood, tag, or related-artist lane you want.
 
-Static Aurral playlists are the memory layer. They preserve individual finds without pretending every find should become part of the core library.
+Static Aurral playlists are the memory layer. They preserve individual finds without making each find part of the core library.
 
 For source mix, focus matching, and fallback behavior, see [Flows](/using/flows/).
 
 ## Storage, Navidrome, and file reuse
 
-Aurral matches Lidarr's media mount. Keep the main Lidarr library and Aurral-generated folders as separate paths under that root so scans, cleanup, and backups stay clear.
+Aurral uses the Lidarr media mount. Keep the Lidarr library and Aurral-generated folders in separate paths under that root.
+
+Separate paths make scans, cleanup, and backups clear.
 
 Example stack compose (matches [`docker-compose.example.yml`](https://github.com/lklynet/aurral/blob/main/docker-compose.example.yml)):
 
@@ -168,7 +171,7 @@ services:
       - ./config:/config
 
   lidarr:
-    image: lscr.io/linuxserver/lidarr:latest
+    image: lscr.io/linuxserver/lidarr:nightly
     restart: unless-stopped
     ports:
       - "8686:8686"
@@ -210,7 +213,11 @@ After startup:
 
 ### File reuse
 
-Aurral reuses matching Lidarr, static-playlist, or flow files instead of downloading again. Saving a flow find into a static playlist shares the same file until the flow refreshes, then the file moves to the static playlist. Shared paths stay as one file on disk so Navidrome does not see duplicates.
+Aurral reuses matching Lidarr, static-playlist, or flow files. It does not download these files again.
+
+When you save a flow track to a static playlist, both playlists use the same file. Aurral moves the file when the flow refreshes.
+
+Shared paths use one disk file. Thus, Navidrome does not show duplicates.
 
 Reuse works when Aurral matches Lidarr's media mount. See [Playlist imports: file reuse](/using/playlist-imports/#existing-file-reuse).
 

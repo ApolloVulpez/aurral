@@ -3,7 +3,7 @@ title: App overview
 description: Main sections of the Aurral interface.
 ---
 
-Aurral is the Lidarr companion for music discovery: visual, intentional, and connected to the library you already maintain.
+Aurral is a Lidarr companion for music discovery. It connects to your existing library.
 
 ## Main sections
 
@@ -21,13 +21,15 @@ Find artists and albums, preview tracks, inspect library status, and add to Lida
 
 ### Library
 
-Browse artists already in Lidarr with search, sorting, artwork, monitoring status, and full artist pages.
+Browse artists in Lidarr with search, sorting, artwork, monitoring status, and full artist pages.
 
 ### Playlists
 
 ![Aurral playlists](../../../assets/screenshots/playlists.webp)
 
-Scheduled flows, Spotify imports, discover playlists, in-app playback, and download status. Flows regenerate on a schedule; static playlists keep fixed tracklists or sync from Spotify.
+This section contains scheduled flows, Spotify imports, discover playlists, in-app playback, and download status.
+
+Flows regenerate on a schedule. Static playlists keep fixed tracklists or synchronize with Spotify.
 
 ### Activity
 
@@ -35,11 +37,15 @@ Scheduled flows, Spotify imports, discover playlists, in-app playback, and downl
 
 Queue for active Lidarr requests, download client activity (slskd, yt-dlp, and Usenet), and Aurral playlist jobs. History for the completed and failed timeline.
 
+### Blocklist
+
+Manage the artists that Aurral excludes from recommendations, playlist previews, and future playlist downloads.
+
 ### Shows
 
 ![Aurral nearby shows](../../../assets/screenshots/shows.webp)
 
-Nearby concerts for artists you care about, when Ticketmaster is configured.
+When you configure Ticketmaster, this section shows nearby concerts for specified artists.
 
 ### Profile
 
@@ -61,8 +67,8 @@ Admin-only configuration, organized into tabs:
 | **Indexers**         | Prowlarr connection, indexer management, search priorities          |
 | **Download Clients** | yt-dlp, slskd, SABnzbd, NZBGet, source priority, format preferences |
 | **Playback**         | Navidrome and Plex                                                  |
-| **Discover**         | Last.fm, Ticketmaster, discovery refresh and mode                   |
-| **Connect**          | Gotify and webhooks                                                 |
+| **Discover**         | Recommendation refresh, mode, and generated playlists              |
+| **Connect**          | Gotify, webhooks, Last.fm, and Ticketmaster                         |
 | **Users**            | Accounts and permissions                                            |
 
-Metadata providers live at **Settings → Metadata Providers** (`/settings/metadata`).
+Advanced metadata settings are available at `/settings/metadata`. They do not appear in the main settings navigation.

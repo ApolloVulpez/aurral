@@ -11,12 +11,12 @@ For mounts, follow [Match Lidarr](/getting-started/storage/): same media root as
 
 | Path                             | Contains                                                                                                                                                                   |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/config`                        | Database, settings, users, sessions, cache state, and playlist jobs. Mount with `./config:/config`; not shared with other apps.                                            |
+| `/config`                        | Database, settings, users, sessions, cache state, and playlist jobs. Mount it with `./config:/config`. Do not share it with other apps.                                    |
 | `/data` (or Lidarr's media root) | Shared library and downloads. Same mount Lidarr uses.                                                                                                                      |
 | Downloads Folder                 | Generated flows, imported playlists, staging, and playlist files. Set in **Settings → Download Clients → Downloads Folder → Path** (for example `/data/downloads/aurral`). |
 
 :::note
-`/config` replaces the older `/app/backend/data` path from Aurral v1. Existing databases in either location are detected automatically on startup.
+`/config` replaces the older `/app/backend/data` path from Aurral v1. At startup, Aurral automatically detects existing databases in either location.
 :::
 
 ## Back up

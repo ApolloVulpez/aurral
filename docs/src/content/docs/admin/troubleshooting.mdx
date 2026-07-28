@@ -6,37 +6,37 @@ description: Common setup and runtime issues.
 ## Lidarr will not connect
 
 - Use the URL Aurral can reach, not the URL your browser uses. In Docker that is often `http://lidarr:8686` when both containers share a network.
-- Confirm the API key in Lidarr.
+- Make sure that the Lidarr API key is correct.
 
 ## Discover is empty
 
-- Make sure Lidarr is connected and has artists.
+- Make sure that Lidarr is connected and contains artists.
 - Add a Last.fm API key for better discovery.
 - Set your listening-history provider in **Profile** (Last.fm or ListenBrainz username, or Koito instance URL).
 - Run a manual refresh from **Settings → Discover**.
 
 ## Playlists are not downloading
 
-- Confirm at least one download client is configured in **Settings → Download Clients** and/or an indexer in **Settings → Indexers** (yt-dlp, slskd, and/or Prowlarr + SABnzbd/NZBGet).
-- For yt-dlp: **Test connection** and confirm `yt-dlp` plus ffmpeg are installed (included in the Docker image).
+- Configure one or more download sources. Use **Settings → Download Clients** or **Settings → Indexers**.
+- For yt-dlp, select **Test connection**. Make sure that the host has `yt-dlp` and ffmpeg. The Docker image includes them.
 - For slskd: check connection and Soulseek login status.
-- For Usenet: confirm Prowlarr indexers are enabled and the download client can reach completed files.
+- For Usenet, enable the Prowlarr indexers. Make sure that the download client can reach completed files.
 - Try disabling **Strict format only** on the slskd card, or switch preferred format to MP3 if FLAC matches are scarce.
 - Check job states on the Playlists page and **History**.
 
 ## Files do not appear in Navidrome
 
-- Confirm Aurral mounts the same media root as Lidarr ([Match Lidarr](/getting-started/storage/)).
-- Confirm **Settings → Download Clients → Downloads Folder → Path** is under that mount.
-- Confirm Navidrome scans Aurral's downloads path (not only Lidarr's library).
-- Enable missing-track purging in Navidrome.
+- Make sure that Aurral mounts the same media root as Lidarr ([Match Lidarr](/getting-started/storage/)).
+- Make sure that **Settings → Download Clients → Downloads Folder → Path** is under that mount.
+- Make sure that Navidrome scans Aurral's downloads path and not only Lidarr's library.
+- Review the [Navidrome missing-track setting](/integrations/navidrome/#recommended-navidrome-setting).
 
 ## Library reuse or download handoff fails on Windows
 
 Symptoms: logs like `Lidarr track exists but file is not accessible from Aurral`, completed slskd or Usenet files not moving, or **Test library access** failing while Lidarr itself works.
 
 - Mount the same parent host folder Lidarr uses into Aurral. Do not use separate mounts for library and downloads. Example: `N:/ServerFolders/Music:/music`.
-- Set **Downloads Folder → Path** under that mount, e.g. `/music/Aurral`.
+- Set **Downloads Folder → Path** under that mount, for example, `/music/Aurral`.
 - After changing compose `volumes` or `environment`, recreate the container: `docker compose up -d --force-recreate`.
 - Run **Settings → Lidarr → Test library access** to see the exact path Aurral cannot read.
 - If needed, set `PATH_MAPPINGS=N:/ServerFolders/Music|/music` in compose, or add mappings under **Settings → Download Clients → Remote Path Mappings**.
@@ -44,14 +44,15 @@ Symptoms: logs like `Lidarr track exists but file is not accessible from Aurral`
 
 See [Match Lidarr: Windows and mixed Docker setups](/getting-started/storage/#windows-and-mixed-docker-setups).
 
-## Navidrome playlists show but tracks won't play
+## Navidrome playlists show but tracks will not play
 
 Symptoms: flows or shared playlists appear in Navidrome after a scan, but playback fails or tracks are missing. Common on Windows when Aurral runs in Docker with path mappings and Navidrome runs natively.
 
-- Confirm **Test library access** passes in Lidarr settings.
-- Enable **Settings → Playback → Navidrome → Use Navidrome paths in M3U files** and add a Navidrome path mapping, or set `M3U_PATH_MODE=remote` plus `M3U_PATH_MAPPINGS` in compose and recreate.
-- Refresh playlists so `.m3u` files are rewritten: re-run or save a flow, or edit and save a shared playlist.
-- Open a generated `.m3u` under `aurral-weekly-flow` and confirm track lines use paths Navidrome can open.
+- Make sure that **Test library access** passes in Lidarr settings.
+- Enable **Use Navidrome paths in M3U files** and add a Navidrome path mapping in **Settings → Playback → Navidrome**.
+- Alternatively, set `M3U_PATH_MODE=remote` and `M3U_PATH_MAPPINGS` in the Compose file. Then, recreate the container.
+- Refresh the playlists to rewrite the `.m3u` files. Run or save a flow, or edit and save a shared playlist.
+- Open a generated `.m3u` under `aurral-weekly-flow`. Make sure that track lines use paths Navidrome can open.
 
 Leave **Use Navidrome paths in M3U files** off when Navidrome runs in Docker with the same mounts as Aurral.
 
@@ -61,27 +62,37 @@ See [Navidrome: Mixed Windows and Docker](/integrations/navidrome/#mixed-windows
 
 Symptoms: **Sync to Plex now** succeeds but playlists have no tracks, or the Aurral library in Plex stays empty after a scan.
 
-- Confirm Plex can read the flow download tree. From inside the Plex container or host, the path should exist: `<downloads>/aurral-weekly-flow/<flow-id>/...`.
+- Make sure that Plex can read the flow download tree.
+- The Plex container or host must contain this path: `<downloads>/aurral-weekly-flow/<flow-id>/...`.
 - If Plex and Aurral use different mounts, set **Settings → Playback → Plex → Plex downloads path** to the folder Plex sees. Leave it blank when both share the same path prefix.
-- Save settings, then run **Sync to Plex now** again. Initial scans can take several minutes; Aurral runs background catch-up syncs while Plex indexes files.
-- Confirm flows have finished downloading before expecting Plex playlists to populate.
+- Save the settings. Then, select **Sync to Plex now** again.
+- Initial scans can take several minutes. Aurral runs catch-up synchronization in the background while Plex indexes files.
+- Make sure that flows finish their downloads before you expect Plex playlists to populate.
 - **Use Navidrome paths in M3U files** does not apply to Plex.
 
 See [Plex integration](/integrations/plex/).
 
 ## Page keeps reloading or stays blank behind a reverse proxy
 
-- Usually means `AUTH_PROXY_TRUSTED_IPS` doesn't match the address your reverse proxy actually connects from. This isn't the same value as `TRUST_PROXY` — check your proxy's own access logs to confirm its real source address.
+- Make sure that `AUTH_PROXY_TRUSTED_IPS` matches the source address of your reverse proxy.
+- This value is different from `TRUST_PROXY`. Use the proxy access logs to find its source address.
 - If `AUTH_PROXY_TRUSTED_IPS` is unset with proxy auth enabled, Aurral logs a startup warning — set it before exposing the app.
-- For Authelia/forwardAuth, set `AUTH_PROXY_DOMAIN` to your auth origin or the browser may block the login redirect and reauth bounce.
-- For Authentik, `curl -i https://your-aurral-host/outpost.goauthentik.io/ping` must return `204`. If it returns Aurral HTML or another auth redirect, route `/outpost.goauthentik.io` directly to the Authentik outpost and exempt it from `auth_request`.
+- For Authelia or forwardAuth, set `AUTH_PROXY_DOMAIN` to your authentication origin.
+- Without this value, the browser can block the login redirect and reauthentication.
+- For Authentik, `curl -i https://your-aurral-host/outpost.goauthentik.io/ping` must return `204`.
+- If it returns Aurral HTML or another auth redirect, route `/outpost.goauthentik.io` directly to the Authentik outpost.
+- Do not apply `auth_request` to that route.
 - If Authentik logout returns to Aurral's login page, use the exact variable name `AUTH_PROXY_LOGOUT_URL` and point it to `https://your-aurral-host/outpost.goauthentik.io/sign_out`.
-- Only affects proxy-auth setups (`AUTH_PROXY_ENABLED`/`AUTH_PROXY_HEADER`); plain password-login installs aren't affected by this.
-- The reload should stop on its own after a few attempts rather than loop forever - check the browser console for a message explaining why it stopped.
+- This problem affects only proxy-auth setups that use `AUTH_PROXY_ENABLED` or `AUTH_PROXY_HEADER`. It does not affect local password login.
+- The reload must stop automatically after a few attempts. Check the browser console for a message that gives the cause.
 
 ## Docker memory looks high after browsing cover art
 
-Official images preload jemalloc so sharp can return freed native memory after optimizing cover art. Covers are fetched on demand (no background prefetch), cached once as card-sized webp (512px), and the on-disk proxy cache is capped at 256MB with LRU prune. A restart still resets the working set if you need a clean baseline.
+Official images preload jemalloc. Thus, sharp can return free native memory after it optimizes cover art.
+
+Aurral fetches covers on demand without a background prefetch. It caches each cover as a card-size WebP image (512px).
+
+The image-proxy disk cache has a 256MB limit and uses least-recently-used removal. Restart Aurral if you need a clean memory baseline.
 
 ## Permission errors
 

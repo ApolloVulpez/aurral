@@ -3,18 +3,20 @@ title: slskd
 description: Soulseek-backed downloads for flows and playlists.
 ---
 
-slskd handles Soulseek acquisition for flow and playlist tracks. Aurral can also use [Usenet](/integrations/usenet/) via Prowlarr and SABnzbd/NZBGet as an alternate or fallback source.
+slskd handles Soulseek acquisition for flow and playlist tracks. Aurral can also use [Usenet](/integrations/usenet/) through Prowlarr and SABnzbd/NZBGet.
 
 ![Aurral history with slskd downloads](../../../assets/screenshots/history.webp)
 
 ## Setup
 
-1. If Lidarr already uses slskd on a shared `/data` mount, give Aurral that same mount ([Match Lidarr](/getting-started/storage/)).
+1. If Lidarr uses slskd on a shared `/data` mount, give Aurral that same mount ([Match Lidarr](/getting-started/storage/)).
 2. Connect slskd in **Settings → Download Clients → slskd**.
 
 Aurral moves completed files from slskd into your Downloads Folder path.
 
-If slskd runs on Windows and reports host paths like `N:\...`, mount the parent folder into Aurral and add a path mapping under **Settings → Download Clients → Remote Path Mappings**.
+If slskd runs on Windows and reports host paths, mount the parent folder into Aurral. For example, slskd can report `N:\...`.
+
+Then, add a path mapping under **Settings → Download Clients → Remote Path Mappings**.
 
 ## Worker settings
 

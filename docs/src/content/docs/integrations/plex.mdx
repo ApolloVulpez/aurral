@@ -3,7 +3,9 @@ title: Plex
 description: Flow and playlist playback in Plex and Plexamp.
 ---
 
-Plex is optional. Aurral creates an **Aurral** music library in Plex Media Server, scans your flow downloads, and builds regular Plex playlists for each enabled flow and shared playlist. Playlists appear in Plex and Plexamp alongside your other libraries.
+Plex is optional. Aurral creates an **Aurral** music library in Plex Media Server. It scans your flow downloads.
+
+Aurral also builds Plex playlists for each enabled flow and shared playlist. The playlists appear in Plex and Plexamp.
 
 Plex does not read Aurral's `.m3u` files. Playlist sync uses the Plex API after Plex indexes the audio files on disk.
 
@@ -12,20 +14,20 @@ Plex does not read Aurral's `.m3u` files. Playlist sync uses the Plex API after 
 1. Match Lidarr's media mount so Plex can read Aurral's Downloads Folder tree ([Match Lidarr](/getting-started/storage/)).
 2. Open **Settings → Playback → Plex**.
 3. Click **Connect Plex account** and approve the PIN in the Plex popup.
-4. Select your Plex server and confirm the server URL.
+4. Select your Plex server and make sure that the server URL is correct.
 5. Save settings, then click **Test connection**.
 6. After flows have downloaded tracks, click **Sync to Plex now** (or wait for the next playlist update cycle).
 
 Aurral registers the library at `<plex-visible-downloads>/aurral-weekly-flow`. Track files live in flow subfolders under that path. M3U playlists for Navidrome stay in `aurral-weekly-flow/_playlists/` and are not used by Plex.
 
-## Plex vs Navidrome
+## Plex compared with Navidrome
 
 You can run both at the same time. They use the same download tree but different playback mechanisms.
 
 |                   | Navidrome                                              | Plex                                               |
 | ----------------- | ------------------------------------------------------ | -------------------------------------------------- |
-| Playlist format   | `.m3u` files on disk                                   | Regular Plex playlists via API                     |
-| Library setup     | Scan folders + read M3U                                | Aurral creates an **Aurral** music library via API |
+| Playlist format   | `.m3u` files on disk                                   | Regular Plex playlists through the API                     |
+| Library setup     | Scan folders + read M3U                                | Aurral creates an **Aurral** music library through the API |
 | Path mismatch fix | **Use Navidrome paths in M3U files** / `M3U_PATH_MODE` | **Plex downloads path** (optional)                 |
 | Playlist names    | `[A] Flow name`, `[AS] Shared name`                    | Bare flow or playlist name                         |
 
@@ -33,7 +35,7 @@ Navidrome's M3U path settings do not affect Plex.
 
 ## Plex downloads path (optional)
 
-Leave blank when Aurral and Plex share the same filesystem view: same host, or the same Docker volume mounted at the same path in both containers.
+Leave this field blank when Aurral and Plex use the same filesystem view. They can use one host or one shared Docker volume.
 
 Set it when Plex runs in a different container or host and sees a different mount prefix than Aurral. Enter the downloads folder as Plex sees it. Aurral appends `/aurral-weekly-flow` when creating the library.
 
@@ -48,7 +50,9 @@ This is the Plex equivalent of aligning library roots. It is not the same as Nav
 
 ## Sync behavior
 
-**Sync to Plex now** ensures the Aurral library exists, triggers a Plex scan, builds or updates playlists from indexed tracks, and schedules background catch-up syncs while scanning continues.
+**Sync to Plex now** makes sure that the Aurral library exists. It starts a Plex scan and builds or updates playlists.
+
+It also schedules catch-up synchronization in the background while Plex scans the files.
 
 Plex music scans can take minutes. If sync returns immediately with zero indexed tracks, wait for the scan to finish. Catch-up runs automatically, or click **Sync to Plex now** again.
 
@@ -70,7 +74,9 @@ services:
       - /srv/media:/data
 ```
 
-Set Downloads Folder path in the UI (for example `/data/downloads/aurral`). In Plex, you do not need to add the folder manually. Aurral creates the **Aurral** library via API.
+Set the Downloads Folder path in the UI (for example, `/data/downloads/aurral`). You do not have to add the folder in Plex.
+
+Aurral creates the **Aurral** library through the API.
 
 If Aurral uses remote path mappings for Lidarr reuse on Windows, that affects how Aurral reads files internally. It does not replace **Plex downloads path**.
 

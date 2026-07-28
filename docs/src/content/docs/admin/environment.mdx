@@ -17,9 +17,9 @@ Most setup happens in the web UI. These variables matter for Docker deployments.
 
 | Variable | Purpose |
 | -------- | ------- |
-| `PATH_MAPPINGS` | Translate paths for mixed Windows/Docker setups. Format `remote\|local`, separate multiples with `;`. Scope to a source with `source\|remote\|local`. Applied at runtime; edit under **Settings → Download Clients → Remote Path Mappings**. |
+| `PATH_MAPPINGS` | Translate paths for mixed Windows and Docker setups. Use the format `remote\|local`. Separate multiple mappings with `;`. To limit a mapping to one source, use `source\|remote\|local`. Aurral applies these mappings at runtime. Edit them under **Settings → Download Clients → Remote Path Mappings**. |
 | `M3U_PATH_MODE` | `local` (default, Aurral paths in `.m3u` files) or `remote` (paths Navidrome can open). |
-| `M3U_PATH_MAPPINGS` | Navidrome playlist path translations. Format `Aurral path\|Navidrome path`, separate multiples with `;`. Applied at runtime; not shown in the UI. |
+| `M3U_PATH_MAPPINGS` | Translate Navidrome playlist paths. Use the format `Aurral path\|Navidrome path`. Separate multiple mappings with `;`. Aurral applies these mappings at runtime. The UI does not show them. |
 
 ## Authentication
 
@@ -28,13 +28,13 @@ Most setup happens in the web UI. These variables matter for Docker deployments.
 | `TRUST_PROXY` | Set when Aurral is behind a reverse proxy. |
 | `AUTH_PROXY_ENABLED` | Enable reverse-proxy authentication. Default header `x-forwarded-user`. |
 | `AUTH_PROXY_HEADER` | Custom header containing the authenticated username. |
-| `AUTH_PROXY_DOMAIN` | Origin of your forwardAuth login page (e.g. `https://auth.example.com`). Needed for Authelia-style setups so CSP allows the login redirect and session reauth can finish. |
-| `AUTH_PROXY_TRUSTED_IPS` | Comma-separated proxy IP allowlist for auth headers. Required when proxy auth is on — without it, any client that can reach Aurral directly can impersonate users via the identity header. |
+| `AUTH_PROXY_DOMAIN` | Origin of your forwardAuth login page (for example, `https://auth.example.com`). Authelia-style setups need this value. It lets CSP permit the login redirect and complete session reauthentication. |
+| `AUTH_PROXY_TRUSTED_IPS` | Comma-separated proxy IP allowlist for authentication headers. You must set it when you enable proxy authentication. Without it, a direct client can use the identity header to impersonate users. |
 | `AUTH_PROXY_LOGOUT_URL` | Your proxy/IdP's logout endpoint. For Authentik single-application forward auth, use `https://aurral.example.com/outpost.goauthentik.io/sign_out`. When set, logging out of Aurral also ends the proxy-level session. |
-| `AUTH_PROXY_DEFAULT_ROLE` | Role assigned to proxy-auth users who aren't otherwise granted admin: `user` or `admin`. Re-evaluated on every request. |
+| `AUTH_PROXY_DEFAULT_ROLE` | Role for proxy-auth users who do not otherwise have the admin role: `user` or `admin`. Aurral evaluates the role on every request. |
 | `AUTH_PROXY_ADMIN_USERS` | Comma-separated usernames always granted admin. Re-checked on every request, so removing a username here demotes them on their next request. |
-| `AUTH_PROXY_ROLE_HEADER` | Optional header containing the user's group membership (e.g. Authelia's `Remote-Groups`), typically a comma-separated list. Checked against `AUTH_PROXY_ADMIN_GROUPS` on every request. |
-| `AUTH_PROXY_ADMIN_GROUPS` | Comma-separated group names (matched against `AUTH_PROXY_ROLE_HEADER`) that grant admin. A group literally named `admin` isn't treated specially unless listed here. |
+| `AUTH_PROXY_ROLE_HEADER` | Optional header that contains the user's group membership (for example, Authelia's `Remote-Groups`). Usually, this is a comma-separated list. Aurral compares it with `AUTH_PROXY_ADMIN_GROUPS` on every request. |
+| `AUTH_PROXY_ADMIN_GROUPS` | Comma-separated group names that give the admin role. Aurral compares these names with `AUTH_PROXY_ROLE_HEADER`. A group named `admin` has no special function unless you list it here. |
 | `SESSION_EXPIRY_HOURS` | Password-login session lifetime in hours. Default `720` (30 days). |
 
 ## Logging
@@ -47,7 +47,7 @@ Most setup happens in the web UI. These variables matter for Docker deployments.
 
 | Variable | Purpose |
 | -------- | ------- |
-| `AURRAL_IMAGE_PROXY_MAX_BYTES` | Max on-disk image-proxy cache size in bytes. Default `268435456` (256MB). Oldest entries are pruned first; serving an image refreshes its age. |
+| `AURRAL_IMAGE_PROXY_MAX_BYTES` | Maximum image-proxy disk-cache size in bytes. The default is `268435456` (256MB). Aurral removes the oldest entries first. When Aurral serves an image, it updates the age of that image. |
 
 ## Last.fm tuning
 

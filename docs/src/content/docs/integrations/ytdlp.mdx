@@ -3,26 +3,30 @@ title: yt-dlp
 description: YouTube and web-backed downloads for flows and playlists.
 ---
 
-yt-dlp is Aurral's built-in fallback download source. It searches YouTube for artist and title matches, extracts audio with ffmpeg, then writes into your Downloads Folder path.
+yt-dlp is Aurral's built-in fallback download source. It searches YouTube for artist and title matches. Then, it extracts audio with ffmpeg and writes the audio to your Downloads Folder path.
 
-No separate daemon is required, and you do not need an extra volume beyond Aurral's media mount. The Docker image includes `yt-dlp` and `ffmpeg`. On bare metal, install both on the host and keep `yt-dlp` on `PATH`.
+You do not need a separate daemon or an extra volume beyond Aurral's media mount. The Docker image includes `yt-dlp` and `ffmpeg`.
+
+For a bare-metal installation, install both programs on the host. Make sure that `yt-dlp` is on `PATH`.
 
 ## Setup
 
 1. Open **Settings → Download Clients → yt-dlp**.
 2. Leave **Enable yt-dlp** on (default).
-3. Optionally set **Source priority** (default `50`; slskd is `10`, Usenet is `20`).
+3. If necessary, set **Source priority**. The default is `50`. The slskd default is `10`, and the Usenet default is `20`.
 4. **Test connection**, then save.
 
 ## Behavior
 
-Aurral tries download sources in priority order. With defaults, slskd and Usenet run first when configured; yt-dlp fills gaps or works alone when nothing else is set up.
+Aurral tries download sources in priority order. With default settings, configured slskd and Usenet sources run first. yt-dlp fills gaps or works alone.
 
-Results are ranked by title, artist, duration, and noise filters (karaoke, live loops, and similar junk are skipped). Downloaded audio still passes the same track validation used by other sources.
+Aurral ranks results by title, artist, duration, and noise filters. It skips karaoke, live loops, and similar unwanted results.
+
+Aurral validates downloaded audio with the same track validation that it uses for other sources.
 
 When a downloaded file matches the requested track but its duration differs significantly, Aurral retains it under **Activity → Review** for preview, approval, or denial.
 
-Audio from YouTube is typically lossy. Prefer slskd or Usenet when you want higher quality.
+Audio from YouTube is usually lossy. Prefer slskd or Usenet when you want higher quality.
 
 ## Download source priority
 

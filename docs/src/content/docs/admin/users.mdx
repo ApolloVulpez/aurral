@@ -9,13 +9,12 @@ Aurral supports multiple local users with granular permissions.
 
 ## Permissions
 
-Admins can control whether users may:
+Admins can control whether users can:
 
 - Access playlists and flows
 - Add artists or albums
 - Change monitoring
 - Delete artists or albums
-- Access settings
 
 ## Authentication
 
@@ -29,16 +28,16 @@ Set `AUTH_PROXY_ENABLED=true` or provide `AUTH_PROXY_HEADER` to let a trusted re
 
 The default username header is `x-forwarded-user`.
 
-When a proxied username first reaches Aurral, a matching local user is created. Role (user vs admin) comes from one of:
+When a proxied username first reaches Aurral, Aurral creates a matching local user. The user role comes from one of these sources:
 
 - `AUTH_PROXY_DEFAULT_ROLE` - the default for anyone not otherwise granted admin
 - An exact match in `AUTH_PROXY_ADMIN_USERS`
-- Group membership via `AUTH_PROXY_ROLE_HEADER` (e.g. Authelia's `Remote-Groups`), checked against `AUTH_PROXY_ADMIN_GROUPS`
+- Group membership from `AUTH_PROXY_ROLE_HEADER` (for example, Authelia's `Remote-Groups`), compared with `AUTH_PROXY_ADMIN_GROUPS`
 
-This is re-evaluated on every request, so promoting or demoting someone on the proxy/IdP side takes effect on their next request.
-No manual account edits needed in Aurral.
+Aurral evaluates the role on every request. Thus, a proxy or identity-provider role change takes effect on the next request.
+You do not have to edit the account in Aurral.
 
-Set `AUTH_PROXY_TRUSTED_IPS` to your reverse proxy's address. Without it, identity headers are accepted from any client that can reach Aurral.
+Set `AUTH_PROXY_TRUSTED_IPS` to your reverse proxy's address. Without it, Aurral accepts identity headers from any client that can reach Aurral.
 
 For Authelia or similar forwardAuth, set `AUTH_PROXY_DOMAIN` to the login origin. When a session expires, Aurral navigates to `/api/auth/reauth` so the proxy can show its login page, then returns the user to Aurral's home page.
 

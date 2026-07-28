@@ -92,7 +92,7 @@ replace it with an exact published version tag, such as
 
 Open `http://localhost:3001`, create your admin account, and connect Lidarr.
 
-For a full stack with Lidarr, slskd, and Navidrome or Plex, see [`docker-compose.example.yml`](docker-compose.example.yml). Plex setup: [docs](https://docs.aurral.org/integrations/plex/).
+For a stack with Lidarr, slskd, and Navidrome, see [`docker-compose.example.yml`](docker-compose.example.yml). For Plex, see the [Plex setup guide](https://docs.aurral.org/integrations/plex/).
 
 ## Documentation
 

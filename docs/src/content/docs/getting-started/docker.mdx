@@ -22,7 +22,7 @@ services:
       - ./config:/config
 ```
 
-Point `/data:/data` at the host path Lidarr already mounts. `./config` holds Aurral's database, settings, and encrypted secrets.
+Point `/data:/data` at the host path that Lidarr mounts. `./config` holds Aurral's database, settings, and encrypted secrets.
 
 ## Start Aurral
 
@@ -42,7 +42,7 @@ Open `http://localhost:3001`, create your admin account, and connect Lidarr.
 Set the downloads path in **Settings → Download Clients → Downloads Folder → Path** (for example `/data/downloads/aurral`). It must sit under the media mount.
 
 :::note
-`/config` replaces the older `/app/backend/data` path from Aurral v1. Existing databases in either location are detected automatically on startup.
+`/config` replaces the older `/app/backend/data` path from Aurral v1. At startup, Aurral automatically detects existing databases in either location.
 :::
 
 ## Full stack
