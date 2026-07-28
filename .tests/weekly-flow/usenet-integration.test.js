@@ -12,6 +12,7 @@ const [
   isolatedState,
   { prowlarrClient },
   { nzbgetClient },
+  { SabnzbdClient },
   { getEnabledDownloadSources },
   { rankUsenetReleases, selectRankedUsenetCandidates },
   { dbOps },
@@ -20,6 +21,7 @@ const [
   "usenet-integration",
   "backend/services/prowlarrClient.js",
   "backend/services/nzbgetClient.js",
+  "backend/services/sabnzbdClient.js",
   "backend/services/downloadSourceService.js",
   "backend/services/weeklyFlow/weeklyFlowUsenetMatcher.js",
   "backend/db/helpers/index.js",
@@ -220,6 +222,18 @@ test("NZBGet client uses JSON-RPC append signature and exposes completed paths",
   } finally {
     await server.close();
   }
+});
+
+test("SABnzbd client reads the completed download folder", async () => {
+  const client = new SabnzbdClient();
+  client.api = async () => ({
+    config: { misc: { complete_dir: "/downloads/complete" } },
+  });
+
+  assert.equal(
+    (await client.getDownloadDirectories()).destDir,
+    "/downloads/complete",
+  );
 });
 
 test("download source selection orders enabled sources by priority", () => {

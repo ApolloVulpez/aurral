@@ -134,7 +134,7 @@ export class SabnzbdClient {
     const entries = result?.config?.misc || [];
     return {
       completedPath: "",
-      destDir: readConfigValue(entries, "completed_dir"),
+      destDir: readConfigValue(entries, "complete_dir"),
       interDir: "",
       mainDir: "",
     };
