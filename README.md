@@ -40,14 +40,14 @@ Aurral is the Lidarr companion for self-hosted music discovery. Best-in-class re
 ## Screenshots
 
 <p align="center">
-  <img src="frontend/images/discover.webp" width="900" alt="Aurral Discover page" />
+  <img src="docs/src/assets/screenshots/discover.webp" width="900" alt="Aurral Discover page" />
 </p>
 
 <p align="center">
-  <img src="frontend/images/artist.webp" width="205" alt="Aurral personalized recommendations" />
-  <img src="frontend/images/search.webp" width="205" alt="Aurral search results" />
-  <img src="frontend/images/playlists.webp" width="205" alt="Aurral playlists" />
-  <img src="frontend/images/history.webp" width="205" alt="Aurral history timeline" />
+  <img src="docs/src/assets/screenshots/playback.webp" width="205" alt="Aurral artist details and playback" />
+  <img src="docs/src/assets/screenshots/search.webp" width="205" alt="Aurral search results" />
+  <img src="docs/src/assets/screenshots/playlists.webp" width="205" alt="Aurral playlists" />
+  <img src="docs/src/assets/screenshots/history.webp" width="205" alt="Aurral history timeline" />
 </p>
 
 ## Recommended Stack
