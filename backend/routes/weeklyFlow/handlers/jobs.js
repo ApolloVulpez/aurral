@@ -17,16 +17,15 @@ import {
   getAccessibleSharedPlaylist,
 } from "./utils.js";
 import {
-  commitImportToPlaylistLibrary,
-} from "../../../services/slskdOrchestrator.js";
-import {
   buildPlaylistDestination,
   resolvePlaylistRoot,
 } from "../../../services/playlistPaths.js";
 import {
+  commitImportToPlaylistLibrary,
   joinUnderRoot,
   sanitizePathPart,
 } from "../../../services/playlistDownloadUtils.js";
+import { finalizePipelineJobSuccess } from "../../../services/pipelineHelpers.js";
 import path from "path";
 import fs from "fs/promises";
 import { invalidateRequestsCache } from "../../requests.js";
@@ -181,10 +180,12 @@ export function registerJobs(router) {
     const finalPath = path.join(finalDir, finalName);
     try {
       const committedPath = await commitImportToPlaylistLibrary(sourcePath, finalPath);
-      downloadTracker.setDone(job.id, committedPath, job.albumName);
-      import("../../../services/aurralHistoryService.js")
-        .then(({ recordTrackJobCompleted }) => recordTrackJobCompleted(job))
-        .catch(() => {});
+      await finalizePipelineJobSuccess({
+        downloadTracker,
+        job,
+        committedFinalPath: committedPath,
+        album: job.albumName,
+      });
       invalidateRequestsCache();
       res.json({ success: true, path: committedPath });
     } catch (error) {

@@ -15,12 +15,16 @@ const [
   { db },
   { dbOps },
   { downloadTracker },
+  { flowPlaylistConfig },
+  { playlistManager },
   { registerJobs },
 ] = await setupIsolatedBackend(
   "approved-import-path",
   "backend/config/db-sqlite.js",
   "backend/db/helpers/index.js",
   "backend/services/weeklyFlow/weeklyFlowDownloadTracker.js",
+  "backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js",
+  "backend/services/weeklyFlow/weeklyFlowPlaylistManager.js",
   "backend/routes/weeklyFlow/handlers/jobs.js",
 );
 
@@ -52,6 +56,11 @@ test.after(async () => {
 
 test("approving a reviewed download commits it inside the managed playlist library", async () => {
   const playlistId = "40ae99ad-92b0-48c6-93e7-7b39e76703ea";
+  flowPlaylistConfig.createSharedPlaylist({
+    id: playlistId,
+    name: "Reviewed",
+    tracks: [{ artistName: "Artist", trackName: "Track", albumName: "Album" }],
+  });
   const sourcePath = path.join(isolatedState.baseDir, "review", "Track.flac");
   await fs.mkdir(path.dirname(sourcePath), { recursive: true });
   await fs.writeFile(sourcePath, "reviewed audio");
@@ -76,4 +85,9 @@ test("approving a reviewed download commits it inside the managed playlist libra
   assert.equal(payload.path, expectedPath);
   assert.equal(downloadTracker.getJob(jobId)?.finalPath, expectedPath);
   assert.equal(await fs.readFile(expectedPath, "utf8"), "reviewed audio");
+  const m3u = await fs.readFile(
+    path.join(playlistManager.libraryRoot, "[AS] Reviewed.m3u"),
+    "utf8",
+  );
+  assert.match(m3u, /Track\.flac/);
 });

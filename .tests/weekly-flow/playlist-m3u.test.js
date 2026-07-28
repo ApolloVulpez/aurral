@@ -91,6 +91,29 @@ test("collectPlaylistM3uEntries preserves shared playlist track order", async ()
   );
 });
 
+test("collectPlaylistM3uEntries keeps completed tracks after metadata correction", async () => {
+  const playlist = flowPlaylistConfig.createSharedPlaylist({
+    name: "Corrected album",
+    tracks: [
+      { artistName: "Artist", trackName: "Track", albumName: "Imported album" },
+    ],
+  });
+  const trackPath = path.join(weeklyFlowRoot, "music", "track.flac");
+  await fs.mkdir(path.dirname(trackPath), { recursive: true });
+  await fs.writeFile(trackPath, "audio");
+  const jobId = downloadTracker.addJob(playlist.tracks[0], playlist.id);
+  downloadTracker.updateMetadata(jobId, {
+    artistName: "Resolved artist",
+    trackName: "Resolved track",
+  });
+  downloadTracker.setDone(jobId, trackPath, "Resolved album");
+
+  const entries = await collectPlaylistM3uEntries(playlist.id, {
+    weeklyFlowRoot,
+  });
+  assert.deepEqual(entries.map((entry) => entry.path), [trackPath]);
+});
+
 test("refreshPlaylist writes m3u entries for completed tracks", async () => {
   const playlist = flowPlaylistConfig.createSharedPlaylist({
     name: "Ready",

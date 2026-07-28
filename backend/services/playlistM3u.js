@@ -3,6 +3,7 @@ import path from "path";
 import {
   buildSharedTrackIdentity,
   flowPlaylistConfig,
+  tracksShareMembership,
 } from "./weeklyFlow/weeklyFlowPlaylistConfig.js";
 import { downloadTracker } from "./weeklyFlow/weeklyFlowDownloadTracker.js";
 import {
@@ -61,22 +62,23 @@ export async function collectPlaylistM3uEntries(playlistType, options = {}) {
   const doneJobs = downloadTracker
     .getByPlaylistType(playlistType)
     .filter((job) => job?.status === "done" && typeof job?.finalPath === "string");
-  const jobsByIdentity = new Map();
-  for (const job of sortJobsByCreatedAt(doneJobs)) {
-    const identity = buildSharedTrackIdentity(job);
-    if (!jobsByIdentity.has(identity)) {
-      jobsByIdentity.set(identity, job);
-    }
-  }
-
   const sharedPlaylist = flowPlaylistConfig.getSharedPlaylist(playlistType);
   let orderedJobs;
   if (sharedPlaylist?.tracks?.length) {
+    const unmatchedJobs = sortJobsByCreatedAt(doneJobs);
     orderedJobs = [];
+    // ponytail: playlists are small; persist immutable track IDs if quadratic matching matters
     for (const track of sharedPlaylist.tracks) {
-      const job = jobsByIdentity.get(buildSharedTrackIdentity(track));
-      if (job) orderedJobs.push(job);
+      const identity = buildSharedTrackIdentity(track);
+      let index = unmatchedJobs.findIndex(
+        (job) => buildSharedTrackIdentity(job) === identity,
+      );
+      if (index < 0) {
+        index = unmatchedJobs.findIndex((job) => tracksShareMembership(job, track));
+      }
+      if (index >= 0) orderedJobs.push(unmatchedJobs.splice(index, 1)[0]);
     }
+    orderedJobs.push(...unmatchedJobs);
   } else {
     orderedJobs = sortJobsByCreatedAt(doneJobs);
   }
