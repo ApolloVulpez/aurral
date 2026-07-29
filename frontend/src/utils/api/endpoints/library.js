@@ -9,6 +9,7 @@ import {
 } from "../core.js";
 
 const buildStreamUrl = (path) => buildAuthenticatedApiUrl(path);
+const SLOW_LIBRARY_REQUEST_TIMEOUT_MS = 90000;
 
 export const getLibraryArtists = (options = {}) =>
   getData("/library/artists", options);
@@ -82,10 +83,14 @@ export const addLibraryAlbum = async (
     artistId,
     releaseGroupMbid,
     albumName,
+  }, {
+    timeout: SLOW_LIBRARY_REQUEST_TIMEOUT_MS,
   });
 
 export const requestAlbumFromSearch = (payload) =>
-  postData("/library/albums/request", payload);
+  postData("/library/albums/request", payload, {
+    timeout: SLOW_LIBRARY_REQUEST_TIMEOUT_MS,
+  });
 
 export const getLibraryTracks = async (
   albumId,

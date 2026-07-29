@@ -25,6 +25,10 @@ import {
   SettingsModalIntro,
   SettingsModalSection,
 } from "./SettingsModalLayout";
+import {
+  pickBestPlexConnection,
+  resolvePlexConnectionUrl,
+} from "../utils/plexConnections";
 function coerceNavidromePathMappings(value) {
   if (!Array.isArray(value)) return [];
   return value.map((entry) => ({
@@ -143,11 +147,6 @@ export function SettingsPlaybackSection({
     };
   }, [plexToken]);
 
-  const pickBestConnection = (server) => {
-    const conns = server.connections || [];
-    return conns.find((c) => c.local) || conns.find((c) => c.uri) || conns[0];
-  };
-
   const handleConnectPlex = async () => {
     setPlexConnecting(true);
     try {
@@ -174,9 +173,10 @@ export function SettingsPlaybackSection({
       const owned = (servers || []).filter((s) => s.owned);
       const patch = { token, ...(clientId ? { clientId } : {}) };
       if (owned.length === 1) {
-        const best = pickBestConnection(owned[0]);
-        if (best?.uri) {
-          patch.url = best.uri;
+        const best = pickBestPlexConnection(owned[0]);
+        const url = resolvePlexConnectionUrl(best);
+        if (url) {
+          patch.url = url;
           patch.machineIdentifier = owned[0].clientIdentifier;
         }
       }
@@ -195,13 +195,24 @@ export function SettingsPlaybackSection({
   };
 
   const handleSelectPlexServer = (server) => {
-    const best = pickBestConnection(server);
-    if (!best?.uri) {
+    const best = pickBestPlexConnection(server);
+    const url = resolvePlexConnectionUrl(best);
+    if (!url) {
       showError("Selected Plex server has no usable connection.");
       return;
     }
-    updatePlex({ url: best.uri, machineIdentifier: server.clientIdentifier });
+    updatePlex({ url, machineIdentifier: server.clientIdentifier });
     showInfo(`Selected "${server.name}". Remember to Save settings.`);
+  };
+
+  const handleDisconnectPlex = () => {
+    updatePlex({
+      token: "",
+      url: "",
+      machineIdentifier: "",
+    });
+    setPlexServers([]);
+    showInfo("Plex disconnected. Save settings to apply.");
   };
 
   const handleTestPlex = async () => {
@@ -507,6 +518,15 @@ export function SettingsPlaybackSection({
                     ? "Reconnect Plex account"
                     : "Connect Plex account"}
               </button>
+              {plex.token ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={handleDisconnectPlex}
+                >
+                  Disconnect
+                </button>
+              ) : null}
               {plex.token && (
                 <span className="settings-page__status">
                   <CheckCircle className="settings-page__status-icon" />

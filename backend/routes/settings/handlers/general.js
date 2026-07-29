@@ -14,6 +14,7 @@ import {
   normalizeM3uPathMode,
 } from "../../../services/playlistM3uPaths.js";
 import { logger } from "../../../services/logger.js";
+import { mergePlexIntegration } from "./plexSettings.js";
 
 function mergeIntegrations(existing, input, keys) {
   const merged = { ...existing, ...input };
@@ -262,12 +263,7 @@ export function registerGeneral(router) {
       if (integrations) {
         mergedIntegrations = mergeIntegrations(mergedIntegrations, integrations, INTEGRATION_KEYS);
         mergedIntegrations.plex = integrations.plex
-          ? {
-              ...(mergedIntegrations.plex || {}),
-              ...integrations.plex,
-              token: integrations.plex.token || mergedIntegrations.plex?.token || "",
-              clientId: integrations.plex.clientId || mergedIntegrations.plex?.clientId || "",
-            }
+          ? mergePlexIntegration(mergedIntegrations.plex, integrations.plex)
           : mergedIntegrations.plex;
         mergedIntegrations.webhooks = integrations.webhooks !== undefined
           ? integrations.webhooks
