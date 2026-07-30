@@ -1,8 +1,9 @@
 <div align="center" width="100%">
   <img src="frontend/public/arralogo.svg" width="128" height="128" alt="Aurral Logo" />
-</div>
-
+  
 # Aurral
+
+</div>
 
 [![Docker](https://img.shields.io/badge/docker-ghcr.io%2Flklynet%2Faurral-blue?logo=docker&logoColor=white)](https://ghcr.io/lklynet/aurral)
 [![Downloads](https://img.shields.io/badge/dynamic/json?url=https://ghcr-badge.elias.eu.org/api/lklynet/aurral/aurral&query=downloadCount&label=downloads&logo=docker&color=2496ed)](https://github.com/lklynet/aurral/pkgs/container/aurral)
