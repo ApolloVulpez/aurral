@@ -7,26 +7,30 @@ Aurral requires Lidarr. Aurral adds artists and albums, reads library state, and
 
 ## Connection
 
-During onboarding or in **Settings → Lidarr**, provide:
+Enter these values in first-run setup or in **Settings > Lidarr**:
 
 ![Aurral Lidarr integration settings](../../../assets/screenshots/settings-lidarr.webp)
 
 - The URL Aurral can reach (often `http://lidarr:8686` in Docker)
 - Your Lidarr API key
 - Default quality profile, metadata profile, tag, monitoring option, and search-on-add behavior
-- Optional **Davo's Community Lidarr Guide** for discovery-friendly quality profiles and naming
+- Optional **Davo's Community Lidarr Guide** for quality profiles and file names
 
 ## Library access check
 
-Aurral tests that it can read files at the paths Lidarr reports. If this fails, mount the same media root Lidarr uses. See [Match Lidarr](/getting-started/storage/).
+Aurral tests file access at each path that Lidarr reports. If the test fails, mount the Lidarr media root in Aurral.
+
+See [Match Lidarr](/getting-started/storage/).
 
 In mixed Windows and Docker setups, **Test library access** shows the exact path that Lidarr reports.
 
-If Aurral mounts that folder at a different path, add a mapping under **Settings → Download Clients → Remote Path Mappings**.
+If Aurral mounts that folder at a different path, add a mapping under **Settings > Download Clients > Remote Path Mappings**.
 
 Path mappings let Aurral read files. If Navidrome uses a different path, enable **Use Navidrome paths in M3U files**.
 
-Then, add a Navidrome mapping so `.m3u` files use the correct paths. See [Navidrome](/integrations/navidrome/#mixed-windows-and-docker-navidrome).
+Add a Navidrome mapping so that `.m3u` files use the correct paths.
+
+See [Navidrome](/integrations/navidrome/#mixed-windows-and-docker-navidrome).
 
 ## Safety
 
@@ -34,9 +38,16 @@ Artist and album changes go through Lidarr. Aurral does not write directly into 
 
 ## Import list feeds
 
-Each flow can expose a Lidarr Custom List URL. Open the flow menu on **Playlists**, choose **Lidarr import URL**, then add it in Lidarr under **Settings → Import Lists → Custom List**.
+Each flow can provide a Lidarr Custom List URL.
 
-The copied URL uses the same host you have open in your browser, for example `https://aurral.kell.ly/api/feeds/...`. Lidarr must be able to reach that host.
+1. Open the flow menu on **Playlists**.
+2. Select **Lidarr import URL**.
+3. In Lidarr, open **Settings > Import Lists > Custom List**.
+4. Add the URL.
+
+The copied URL uses the Aurral host in your browser. For example, the URL can start with `https://aurral.example.com/api/feeds/`.
+
+Lidarr must be able to reach that host.
 
 The URL includes a per-flow token. Treat it like a secret. Anyone with the URL can read that flow's artist list.
 

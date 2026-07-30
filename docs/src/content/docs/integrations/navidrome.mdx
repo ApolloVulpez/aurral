@@ -11,10 +11,11 @@ Aurral also writes M3U playlists for your flows and static playlists.
 
 ## Setup
 
-1. Match Lidarr's media mount in Aurral and Navidrome ([Match Lidarr](/getting-started/storage/)).
-2. In Navidrome, scan Lidarr's library **and** Aurral's Downloads Folder path (for example `/data/downloads/aurral`).
-3. Connect Navidrome in **Settings → Playback → Navidrome**.
-4. Let Aurral create or update its generated library and playlist files under `aurral-weekly-flow`.
+1. Use the Lidarr media mount in Aurral and Navidrome. See [Match Lidarr](/getting-started/storage/).
+2. In Navidrome, scan the Lidarr library.
+3. Add the Aurral Downloads Folder to the Navidrome scan. For example, use `/data/downloads/aurral`.
+4. Connect Navidrome in **Settings > Playback > Navidrome**.
+5. Let Aurral create its library and playlist files under `aurral-weekly-flow`.
 
 Aurral configures Navidrome through its API. Navidrome must also have access to the audio files on disk.
 
@@ -30,13 +31,17 @@ Aurral writes M3U playlists under `aurral-weekly-flow` with one track path per l
 
 ### What remote mode does
 
-With path mappings, Aurral translates Lidarr's Windows paths into container paths so it can read files. For example, `N:\ServerFolders\Music\Music\Artist\track.mp3` becomes `/music/Music/Artist/track.mp3` inside Docker.
+Path mappings translate Lidarr Windows paths into Aurral container paths. Aurral can then read the files.
+
+For example, `N:\ServerFolders\Music\Music\Artist\track.mp3` becomes `/music/Music/Artist/track.mp3` in Docker.
 
 By default, M3U files use Aurral's container paths. Navidrome cannot resolve `/music/...` if it runs natively on Windows.
 
-This also occurs if its container mounts the same files at a different path. Playlists can appear, but tracks do not play.
+The same problem occurs if the Navidrome container uses a different path for the files. Playlists can appear, but tracks do not play.
 
-**Use Navidrome paths in M3U files** (or `M3U_PATH_MODE=remote`) changes paths only when writing M3U files. Aurral still uses container paths internally for file checks, reuse, and repairs.
+**Use Navidrome paths in M3U files** changes paths only in M3U files. You can also set `M3U_PATH_MODE=remote`.
+
+Aurral still uses container paths for file checks, reuse, and repairs.
 
 ### Example (Aurral in Docker, Navidrome on Windows)
 
@@ -52,9 +57,11 @@ services:
       - ./config:/config
 ```
 
-Set **Downloads Folder → Path** to something under `/music` (for example `/music/Aurral`) in the UI.
+Set **Downloads Folder > Path** to a path under `/music`. For example, use `/music/Aurral`.
 
-After enabling remote mode, refresh affected playlists by re-running a flow or editing and saving a shared playlist.
+After you enable remote mode, refresh each affected playlist.
+
+Run the flow again. For a shared playlist, edit the playlist and then save it.
 
 See also [Match Lidarr: Windows and mixed Docker setups](/getting-started/storage/#windows-and-mixed-docker-setups).
 
@@ -64,10 +71,12 @@ See also [Match Lidarr: Windows and mixed Docker setups](/getting-started/storag
 ND_SCANNER_PURGEMISSING=always
 ```
 
-Purging missing tracks helps Navidrome clean up old flow entries after a flow rotates.
+`ND_SCANNER_PURGEMISSING=always` removes old flow entries after a flow changes.
 
 :::caution
-This setting also removes other missing Navidrome files and their ratings, play counts, and playlist entries. Use it only when missing files will not return.
+`ND_SCANNER_PURGEMISSING=always` also removes other missing Navidrome files. It removes their ratings, play counts, and playlist entries.
+
+Use this setting only when missing files will not return.
 :::
 
 For Plex and Plexamp instead, see [Plex](/integrations/plex/).

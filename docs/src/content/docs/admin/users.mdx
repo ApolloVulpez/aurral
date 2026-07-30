@@ -1,9 +1,9 @@
 ---
-title: Users & authentication
+title: Users and authentication
 description: Local users, permissions, LAN auto-login, and reverse-proxy auth.
 ---
 
-Aurral supports multiple local users with granular permissions.
+Aurral supports multiple local users with individual permissions.
 
 ![Aurral user settings](../../../assets/screenshots/settings-user.webp)
 
@@ -24,7 +24,7 @@ Admins can control whether users can:
 
 ## Reverse-proxy auth
 
-Set `AUTH_PROXY_ENABLED=true` or provide `AUTH_PROXY_HEADER` to let a trusted reverse proxy authenticate users before requests reach Aurral.
+Set `AUTH_PROXY_ENABLED=true` to use reverse-proxy authentication. Use `AUTH_PROXY_HEADER` if the proxy uses a custom header.
 
 The default username header is `x-forwarded-user`.
 
@@ -34,22 +34,26 @@ When a proxied username first reaches Aurral, Aurral creates a matching local us
 - An exact match in `AUTH_PROXY_ADMIN_USERS`
 - Group membership from `AUTH_PROXY_ROLE_HEADER` (for example, Authelia's `Remote-Groups`), compared with `AUTH_PROXY_ADMIN_GROUPS`
 
-Aurral evaluates the role on every request. Thus, a proxy or identity-provider role change takes effect on the next request.
+Aurral evaluates the role on every request. A proxy or identity-provider role change takes effect on the next request.
 You do not have to edit the account in Aurral.
 
 Set `AUTH_PROXY_TRUSTED_IPS` to your reverse proxy's address. Without it, Aurral accepts identity headers from any client that can reach Aurral.
 
 For Authelia or similar forwardAuth, set `AUTH_PROXY_DOMAIN` to the login origin. When a session expires, Aurral navigates to `/api/auth/reauth` so the proxy can show its login page, then returns the user to Aurral's home page.
 
-For Authentik, route `/outpost.goauthentik.io` directly to the Authentik outpost and do not protect that location with `auth_request`. Verify it before testing Aurral:
+For Authentik, route `/outpost.goauthentik.io` directly to the Authentik outpost.
+
+Do not protect that location with `auth_request`. Verify the route before you test Aurral:
 
 ```bash
 curl -i https://aurral.example.com/outpost.goauthentik.io/ping
 ```
 
-The response must be `204`. To make Aurral's **Log out** action end the Authentik session too, set `AUTH_PROXY_LOGOUT_URL=https://aurral.example.com/outpost.goauthentik.io/sign_out`.
+The response must be `204`.
 
-Proxy-created users cannot use local password login until an admin sets a password. After creation, admins can manage the account from **Settings → Users**.
+Set `AUTH_PROXY_LOGOUT_URL=https://aurral.example.com/outpost.goauthentik.io/sign_out` to end the Authentik session when you log out.
+
+Proxy-created users cannot use local password login until an admin sets a password. After creation, admins can manage the account from **Settings > Users**.
 
 ## Reset admin password
 

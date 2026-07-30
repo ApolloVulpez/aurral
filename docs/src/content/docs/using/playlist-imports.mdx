@@ -16,25 +16,31 @@ Imported playlists are separate from flows.
 
 The fastest path is in-app import on **Playlists**.
 
-1. Open the create menu and choose **Import playlist**.
-2. Select **Spotify**, then **Connect Spotify**.
-3. Approve access in the popup, pick a playlist, and import.
+1. Open the create menu.
+2. Select **Import playlist**.
+3. Select **Spotify**.
+4. Select **Connect Spotify**.
+5. Approve access in the pop-up window.
+6. Select a playlist.
+7. Start the import.
 
-During import you can set a display name and a sync schedule. Sync re-fetches the Spotify tracklist and queues new tracks. Choose **None** for a fixed snapshot. Change sync later from the playlist menu.
+You can set a display name and a synchronization schedule. Synchronization gets the Spotify tracklist again and queues new tracks.
+
+Choose **None** for a fixed tracklist. You can change the schedule later from the playlist menu.
 
 Aurral stores the connection for each user. Use **Disconnect** in the import modal to revoke access.
 
-Allow the OAuth popup if your browser blocks it. Self-hosted instances need `oauth.html` reachable on the same origin Aurral serves.
+Allow the OAuth pop-up window if your browser blocks it. The Aurral origin must provide `oauth.html`.
 
 ### Manual CSV import
 
-When OAuth is not an option, use the [Spotify import helper](https://aurral.org/aurral-convert.html) or Exportify plus CSVJSON:
+When OAuth is not an option:
 
-1. Export from [Exportify](https://exportify.net/)
-2. Convert with [CSVJSON](https://csvjson.com/csv2json) or aurral-convert.html
-3. Import the JSON on the **JSON file** tab in the import modal
+1. Export the playlist from [Exportify](https://exportify.net/).
+2. Convert the file with the [Spotify CSV converter](/tools/spotify-csv-converter/).
+3. Import the JSON file on the **JSON file** tab.
 
-Aurral accepts CSVJSON output directly and understands Spotify-style keys like `Track Name`, `Artist Name(s)`, and `Album Name`.
+You can also use [CSVJSON](https://csvjson.com/csv2json). Aurral accepts its output directly and understands Spotify-style keys like `Track Name`, `Artist Name(s)`, and `Album Name`.
 
 ## What the importer accepts
 
@@ -115,7 +121,7 @@ Minimum shape:
 
 ### Raw array of tracks
 
-Aurral treats a top-level array of track objects as one playlist. The CSV converter generates this format.
+Aurral treats a top-level array of track objects as one playlist.
 
 ```json
 [
@@ -166,23 +172,27 @@ Imported playlists behave differently from flows when downloads fail:
 
 - Aurral queues each imported track as a separate worker job.
 - The active download pipeline can try multiple candidates and configured sources.
-- After Aurral exhausts those options, the track stays in the failed state across worker and container restarts.
+- If all options fail, the track stays in the failed state after a restart.
 - Choose **Re-search missing** from the playlist menu to explicitly queue failed tracks again.
 - Only flows can generate replacement tracks.
 
 ## Existing file reuse
 
-Aurral reuses one file across playlists instead of downloading again. Add a flow find to a static playlist and both point at the same file until the flow refreshes. On refresh, Aurral moves still-referenced files into the static playlist before wiping the flow folder, then builds the new flow.
+Aurral can use one file in multiple playlists. This prevents a second download of the same file.
 
-Aurral prefers static playlists and Lidarr when both exist. Multiple playlists can share one path.
+If you add a flow track to a static playlist, both playlists use the same file.
 
-Before Aurral removes a playlist, it relocates the remaining references. Thus, Navidrome does not show duplicates.
+When the flow refreshes, Aurral keeps files that the static playlist uses. Aurral then builds the new flow.
+
+Aurral prefers static playlists and Lidarr files. Multiple playlists can use one path.
+
+Before Aurral removes a playlist, it moves the other file references. Navidrome does not show duplicate files.
 
 Lidarr-aware reuse requires Aurral to read the files at the paths Lidarr reports. Match Lidarr's media mount (for example `/data:/data` with root `/data/music`). See [Match Lidarr](/getting-started/storage/).
 
-If Lidarr runs on Windows and Aurral runs in Docker, run **Test library access** in **Settings → Lidarr**.
+If Lidarr runs on Windows and Aurral runs in Docker, run **Test library access** in **Settings > Lidarr**.
 
-Use the reported path to add a mapping under **Settings → Download Clients → Remote Path Mappings**.
+Use the reported path to add a mapping under **Settings > Download Clients > Remote Path Mappings**.
 
 If Navidrome uses a different path for reused Lidarr files, enable **Use Navidrome paths in M3U files**.
 

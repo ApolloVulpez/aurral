@@ -3,21 +3,29 @@ title: Koito
 description: Self-hosted listening history for personalized discovery.
 ---
 
-[Koito](https://koito.io/) is optional. It is a self-hosted, ListenBrainz-compatible scrobbler. When you run your own Koito instance, Aurral can use it for personalized discovery without relying on Last.fm or public ListenBrainz.
+[Koito](https://koito.io/) is optional. It is a self-hosted scrobbler that is compatible with ListenBrainz.
+
+Aurral can use your Koito data for personalized discovery. You do not need Last.fm or the public ListenBrainz service.
 
 ## Per-user setup
 
-Each user sets their Koito instance URL in **Profile** under **Listening history**. Choose **Koito** and enter a base URL Aurral can reach.
+Each user must set a Koito instance URL:
+
+1. Open **Profile > Listening history**.
+2. Select **Koito**.
+3. Enter a base URL that Aurral can reach.
 
 For example, enter `https://koito.example.com:4110`.
 
 ![Aurral profile listening history](../../../assets/screenshots/profile-listening.webp)
 
-Aurral reads your top artists from Koito's chart API to shape recommendations and discover playlists. Koito must be reachable from the Aurral server, not only from your browser.
+Aurral reads your top artists from the Koito chart API. Aurral uses these artists for recommendations and discover playlists.
+
+The Aurral server must be able to reach Koito.
 
 ## Requirements
 
-- A running Koito instance with scrobbles
+- A Koito instance that contains scrobbles
 - Enough listening history for meaningful top-artist charts
 - Artists in Koito must have MusicBrainz IDs so Aurral can match them to your library
 
@@ -25,7 +33,7 @@ Aurral reads your top artists from Koito's chart API to shape recommendations an
 
 | Provider     | Admin setup                        | User setup                  |
 | ------------ | ---------------------------------- | --------------------------- |
-| Last.fm      | API key in **Settings → Connect**  | Username in **Profile**     |
+| Last.fm      | API key in **Settings > Connect**  | Username in **Profile**     |
 | ListenBrainz | None                               | Username in **Profile**     |
 | Koito        | None                               | Instance URL in **Profile** |
 

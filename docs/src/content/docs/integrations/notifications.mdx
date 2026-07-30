@@ -1,34 +1,36 @@
 ---
-title: Notifications (Gotify & Webhooks)
+title: Notifications (Gotify and webhooks)
 description: Get alerts when flows finish and discovery updates.
 ---
 
-Aurral can send notifications when events happen: a flow finishes downloading, or daily discovery recommendations are ready.
+Aurral can send a notification when a flow download completes. It can also send one when daily recommendations are ready.
 
 Two delivery methods are available. You can use one or both.
 
 ## Gotify
 
-Gotify is a self-hosted push notification server. Configure it in **Settings → Connect**.
+Gotify is a self-hosted push notification server. Configure it in **Settings > Connect**.
 
-Provide:
-- **Server URL** — the base URL Aurral can reach (for example, `http://gotify:8888` in Docker)
-- **App token** — create an application in Gotify and copy its token
+Enter these values:
+- **Server URL**: the base URL Aurral can reach (for example, `http://gotify:8888` in Docker)
+- **App token**: the token for a Gotify application
 
 Toggle which events fire:
-- **Notify when discovery updates** — sends a notification when the daily recommendation refresh finishes
-- **Notify when weekly flow finishes** — sends a notification with the number of completed and failed tracks
+- **Notify when discovery updates**: sends a notification when the daily recommendation refresh finishes
+- **Notify when weekly flow finishes**: sends a notification with the number of completed and failed tracks
 
-Click **Test notification** on the Gotify card to verify connectivity.
+Select **Test notification** on the Gotify card to test the connection.
 
 ## Webhooks
 
-Webhooks send an HTTP request for each enabled event. Configure them in the **Webhooks** section under **Settings → Connect**.
+Webhooks send an HTTP request for each enabled event. Configure them in the **Webhooks** section under **Settings > Connect**.
 
-Each webhook has:
-- **URL** — the endpoint to call (must start with `http://` or `https://`)
-- **Body** — optional JSON payload. Use `$flowPath` and `$flowName` as placeholders for playlists. Leave blank to send a GET request instead of POST.
-- **Headers** — optional key-value pairs
+Enter these values for each webhook:
+- **URL**: the endpoint to call (must start with `http://` or `https://`)
+- **Body**: optional JSON data. Use `$flowPath` and `$flowName` as playlist placeholders.
+- **Headers**: optional key-value pairs
+
+Leave **Body** blank to send a GET request. Enter a body to send a POST request.
 
 Toggle which events fire for your webhooks:
 - **Notify when discovery updates**

@@ -1,25 +1,34 @@
 ---
-title: Usenet (Prowlarr + SABnzbd/NZBGet)
+title: Usenet (Prowlarr and SABnzbd or NZBGet)
 description: Usenet-backed downloads for flows and playlists.
 ---
 
 Usenet downloads use **Prowlarr** for indexer searches. They use **SABnzbd** or **NZBGet** as the download client.
 
-Aurral treats each download client equally. You must configure only one download client for Usenet to work.
+Aurral treats each download client equally. You must configure only one download client for Usenet operation.
 
 Enable and connect both components:
 
-- The download client in **Settings → Download Clients**
-- Prowlarr in **Settings → Indexers**
+- The download client in **Settings > Download Clients**
+- Prowlarr in **Settings > Indexers**
 
 ## Setup overview
 
 1. Run Prowlarr with at least one Usenet audio indexer configured.
 2. Run SABnzbd or NZBGet with a category Aurral can use (default `aurral`).
 3. Match Lidarr's media mount so Aurral can read completed files ([Match Lidarr](/getting-started/storage/)).
-4. In **Settings → Indexers**, enable **Prowlarr**, enter URL and API key, then **Test connection** and **Refresh indexers**. Enable each indexer and set priority.
-5. In **Settings → Download Clients**, enable **SABnzbd** or **NZBGet**, enter URL and credentials, then **Test connection**.
-6. Save settings.
+4. Open **Settings > Indexers**.
+5. Enable **Prowlarr**.
+6. Enter the Prowlarr URL and API key.
+7. Select **Test connection**.
+8. Select **Refresh indexers**.
+9. Enable each indexer.
+10. Set the priority for each indexer.
+11. Open **Settings > Download Clients**.
+12. Enable **SABnzbd** or **NZBGet**.
+13. Enter the URL and credentials.
+14. Select **Test connection**.
+15. Save the settings.
 
 ## Prowlarr
 
@@ -30,7 +39,9 @@ Open the **Prowlarr** card under **Indexers**:
 - **Music categories**: Newznab audio categories (default `3000`)
 - **Result limit**: max releases returned per search
 
-After **Test connection**, Aurral lists Usenet indexers from Prowlarr. Open each card and set **Priority**. A lower number has higher priority.
+After the connection test, Aurral shows the Usenet indexers from Prowlarr.
+
+Open each card. Set **Priority**. A lower number has a higher priority.
 
 ## SABnzbd
 
@@ -42,7 +53,7 @@ Open the **SABnzbd** card under **Download clients**:
 - **Source priority**: relative to slskd. The default is `20`. The slskd default is `10`.
 - **Add NZBs paused**: send jobs to SABnzbd in a paused state
 
-Aurral polls SABnzbd until the download completes, then imports the best audio file into your Downloads Folder under `aurral-weekly-flow`.
+Aurral monitors SABnzbd until the download is complete. Aurral then imports the best audio file into `aurral-weekly-flow`.
 
 ## NZBGet
 
@@ -56,19 +67,23 @@ Open the **NZBGet** card under **Download clients**:
 - **Completed download path**: optional override when Aurral cannot infer the finished-file location
 - **Add NZBs paused**: send jobs to NZBGet in a paused state
 
-Aurral polls NZBGet until the download completes, then imports the best audio file into your Downloads Folder under `aurral-weekly-flow`.
+Aurral monitors NZBGet until the download is complete. Aurral then imports the best audio file into `aurral-weekly-flow`.
 
 If NZBGet runs on Windows and reports host paths, mount the parent folder into Aurral.
 
-Then, add a path mapping under **Settings → Download Clients → Remote Path Mappings**.
+Then, add a path mapping under **Settings > Download Clients > Remote Path Mappings**.
 
-When the best audio file matches the requested track but its duration differs significantly, Aurral retains it under **Activity → Review** for preview, approval, or denial.
+Aurral can find a track with an incorrect duration. Aurral retains this track under **Activity > Review**.
+
+You can preview, approve, or deny the track.
 
 ## Download source priority and fallback
 
 Aurral can run slskd, Usenet, and yt-dlp at the same time. Each source has a **source priority**. Aurral tries lower numbers first.
 
-When a source fails or exhausts its candidates, Aurral automatically tries the next configured source for the same track. Swap priorities if you want Usenet or yt-dlp first.
+If a source fails, Aurral tries the next source for the same track.
+
+Change the priorities if you want Aurral to try Usenet or yt-dlp first.
 
 ## History
 

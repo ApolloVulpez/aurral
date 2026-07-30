@@ -1,49 +1,46 @@
-:root {
-  --sl-font: "DM Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --sl-font-mono: "JetBrains Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --sl-color-white: #f7f8f6;
-  --sl-color-gray-1: #cbd2ce;
-  --sl-color-gray-2: #aab3ae;
-  --sl-color-gray-3: #6b736f;
-  --sl-color-gray-4: #3a3f3c;
-  --sl-color-gray-5: #1a1c1a;
-  --sl-color-gray-6: #111111;
-  --sl-color-black: #090909;
-  --sl-color-accent: #9fba6d;
-  --sl-color-accent-high: #bfd889;
-  --sl-color-accent-low: #243018;
-  --sl-color-text: var(--sl-color-white);
-  --sl-color-text-accent: var(--sl-color-accent-high);
-  --sl-color-hairline: rgba(255, 255, 255, 0.08);
-  --sl-color-hairline-shade: rgba(255, 255, 255, 0.04);
-  --sl-nav-bg-color: rgba(7, 9, 9, 0.88);
-  --sl-nav-border-color: rgba(255, 255, 255, 0.08);
-  --sl-sidebar-width: 18.5rem;
-  --sl-content-width: 48rem;
-  --sl-text-base: 1rem;
-  --sl-text-lg: 1.125rem;
-  --sl-line-height: 1.65;
-  --sl-border-radius: 12px;
-}
-
+:root,
 :root[data-theme="light"],
 [data-theme="light"] {
-  --sl-color-white: #090909;
-  --sl-color-gray-1: #1a1c1a;
-  --sl-color-gray-2: #3a3f3c;
-  --sl-color-gray-3: #6b736f;
-  --sl-color-gray-4: #aab3ae;
-  --sl-color-gray-5: #e8ece9;
-  --sl-color-gray-6: #f4f6f4;
-  --sl-color-black: #f7f8f6;
-  --sl-color-accent: #6f8f3f;
-  --sl-color-accent-high: #4f6d28;
-  --sl-color-accent-low: #e8efd9;
-  --sl-nav-bg-color: rgba(247, 248, 246, 0.92);
-  --sl-nav-border-color: rgba(9, 9, 9, 0.08);
+  --sl-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --sl-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --sl-color-white: #f2f2f2;
+  --sl-color-gray-1: #dedede;
+  --sl-color-gray-2: #b0b0b0;
+  --sl-color-gray-3: #858585;
+  --sl-color-gray-4: #595959;
+  --sl-color-gray-5: #303030;
+  --sl-color-gray-6: #1b1b1b;
+  --sl-color-gray-7: #161616;
+  --sl-color-black: #121212;
+  --sl-color-accent: #84cc16;
+  --sl-color-accent-high: #a3e635;
+  --sl-color-accent-low: #20300c;
+  --sl-color-text: var(--sl-color-gray-2);
+  --sl-color-text-accent: var(--sl-color-white);
+  --sl-color-text-invert: var(--sl-color-black);
+  --sl-color-bg: var(--sl-color-black);
+  --sl-color-bg-nav: var(--sl-color-black);
+  --sl-color-bg-sidebar: var(--sl-color-black);
+  --sl-color-bg-inline-code: var(--sl-color-gray-6);
+  --sl-color-bg-accent: var(--sl-color-accent);
+  --sl-color-hairline-light: #303030;
+  --sl-color-hairline: #292929;
+  --sl-color-hairline-shade: #202020;
+  --sl-shadow-sm: none;
+  --sl-shadow-md: none;
+  --sl-shadow-lg: none;
+  --sl-sidebar-width: 20rem;
+  --sl-content-width: 50rem;
+  --sl-text-base: 1rem;
+  --sl-text-lg: 1.0625rem;
+  --sl-text-h1: 2.5rem;
+  --sl-text-h2: 1.75rem;
+  --sl-text-h3: 1.375rem;
+  --sl-line-height: 1.65;
 }
 
 html {
+  background: #121212;
   color-scheme: dark;
 }
 
@@ -52,37 +49,140 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-.site-title {
-  letter-spacing: -0.03em;
-}
-
 .header {
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: #121212;
+  border-bottom-color: var(--sl-color-hairline);
+  box-shadow: none;
 }
 
-.sidebar-content a[href="https://aurral.org"] {
-  color: var(--sl-color-accent-high);
+.site-title {
+  color: var(--sl-color-white);
   font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.social-icons a {
+  color: var(--sl-color-white);
+}
+
+.social-icons::after {
+  display: none;
+}
+
+.sidebar-pane {
+  border-inline-end: 1px solid var(--sl-color-hairline);
+}
+
+.sidebar-content {
+  padding-top: 2.5rem;
+}
+
+.sidebar-content a {
+  border-radius: 4px;
+}
+
+.sidebar-content a[aria-current="page"],
+.sidebar-content a[aria-current="page"]:hover,
+.sidebar-content a[aria-current="page"]:focus {
+  background: var(--sl-color-gray-6);
+  color: var(--sl-color-white) !important;
+}
+
+.sidebar-content .top-level > li > a.large {
+  color: var(--sl-color-gray-2) !important;
+}
+
+.right-sidebar {
+  border-inline-start: 0 !important;
+}
+
+.right-sidebar-panel {
+  padding-top: 2.75rem;
+}
+
+.right-sidebar-panel h2 {
+  display: none;
+}
+
+.right-sidebar-panel starlight-toc nav > ul {
+  border-inline-start: 1px solid var(--sl-color-hairline);
+  padding-inline-start: 0.75rem;
+}
+
+main > .content-panel + .content-panel {
+  border-top: 0;
+}
+
+.sl-markdown-content h2 {
+  letter-spacing: -0.02em;
+}
+
+.sl-markdown-content h3,
+.sl-markdown-content h4 {
+  letter-spacing: -0.015em;
 }
 
 .sl-markdown-content a:not(:where(.not-content *)) {
-  color: var(--sl-color-accent-high);
+  color: var(--sl-color-white);
+  text-underline-offset: 0.2em;
 }
 
 .sl-markdown-content a:not(:where(.not-content *)):hover {
-  color: var(--sl-color-white);
+  color: var(--sl-color-gray-1);
+}
+
+.sl-markdown-content .card {
+  background: transparent;
+  background-image: none;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.sl-markdown-content .card:hover {
+  border-color: var(--sl-color-gray-4);
 }
 
 .sl-markdown-content img:not(:where(.not-content *)) {
   border: 1px solid var(--sl-color-hairline);
-  border-radius: var(--sl-border-radius);
+  border-radius: 6px;
   display: block;
   margin-block: 1.25rem;
   width: 100%;
 }
 
+.sl-markdown-content table {
+  border: 1px solid var(--sl-color-hairline);
+}
+
+.starlight-aside,
 .expressive-code {
-  --ec-frm-frameBoxShadowColor: rgba(0, 0, 0, 0.35);
-  --ec-brdRad: 12px;
+  background-image: none;
+  box-shadow: none;
+}
+
+.expressive-code {
+  --ec-brdRad: 6px;
+  --ec-frm-frameBoxShadowColor: transparent;
+}
+
+@media (min-width: 50rem) {
+  :root {
+    --sl-nav-height: 4.5rem;
+    --sl-nav-pad-x: 2rem;
+    --sl-sidebar-pad-x: 1.5rem;
+    --sl-content-pad-x: 2rem;
+  }
+}
+
+@media (min-width: 72rem) {
+  main > .content-panel:first-of-type {
+    padding-top: 3rem;
+    padding-bottom: 1rem;
+  }
+
+  main > .content-panel + .content-panel {
+    padding-top: 0.75rem;
+    padding-bottom: 4rem;
+  }
 }

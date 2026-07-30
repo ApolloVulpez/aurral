@@ -5,18 +5,22 @@ description: Track active downloads, Lidarr requests, and Aurral playlist jobs.
 
 Activity replaces the older Requests and Downloads views. It has three tabs:
 
-- **Queue** — album requests and downloads in progress
-- **Review** — downloaded tracks waiting for your approval
-- **History** — completed, denied, and failed events
+- **Queue**: album requests and downloads in progress
+- **Review**: downloaded tracks that need your approval
+- **History**: completed, denied, and failed events
 
 ![Aurral activity timeline](../../../assets/screenshots/history.webp)
 
-Use **Queue** to see what is downloading or processing right now. Use **Review** when an slskd, Usenet, or yt-dlp download needs a listen before import. Use **History** for a chronological log of what finished or failed.
+Use **Queue** to see active downloads and processes.
 
-Review rows show the intended track, artist, and album, the remote file path, and a readable reason with match scores and duration when available. Aurral retains plausible tracks with a duration mismatch for review instead of discarding them or immediately trying another source.
+Use **Review** when you must listen to a track before import. Use **History** to see completed and failed events.
+
+Each review row shows the requested track, artist, album, and remote file path. It also shows the match scores and duration.
+
+Aurral keeps a possible match for review if the duration is not correct. It does not immediately try another source.
 
 When an album request fails in Lidarr, you can retry the search from History when the entry supports it.
 
-Album requests store the requesting user so Activity can show who asked, and external tools can filter per person.
+Album requests store the requester. Activity can show the requester, and external tools can filter requests by user.
 
 See [yt-dlp](/integrations/ytdlp/), [slskd](/integrations/slskd/), and [Usenet](/integrations/usenet/) for download client setup.

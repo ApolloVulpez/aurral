@@ -3,7 +3,7 @@ title: Environment variables
 description: Deployment variables most users touch outside the web UI.
 ---
 
-Most setup happens in the web UI. These variables matter for Docker deployments.
+Use the web UI for most settings. Use these variables for Docker deployment settings.
 
 ## Mounts and permissions
 
@@ -11,13 +11,13 @@ Most setup happens in the web UI. These variables matter for Docker deployments.
 | -------- | ------- |
 | `PUID` / `PGID` | Run the container as the user that owns mounted folders. |
 | `AURRAL_DATA_DIR` | Override app data directory. Default `/config`. |
-| `DOWNLOAD_FOLDER` | Optional seed for the Downloads Folder path. Prefer **Settings → Download Clients → Downloads Folder → Path**. Must be absolute and under your media mount. |
+| `DOWNLOAD_FOLDER` | Initial Downloads Folder path. Prefer **Settings > Download Clients > Downloads Folder > Path**. Use an absolute path under your media mount. |
 
 ## Path mappings
 
 | Variable | Purpose |
 | -------- | ------- |
-| `PATH_MAPPINGS` | Translate paths for mixed Windows and Docker setups. Use the format `remote\|local`. Separate multiple mappings with `;`. To limit a mapping to one source, use `source\|remote\|local`. Aurral applies these mappings at runtime. Edit them under **Settings → Download Clients → Remote Path Mappings**. |
+| `PATH_MAPPINGS` | Translate paths for mixed Windows and Docker setups. Use the format `remote\|local`. Separate multiple mappings with `;`. To limit a mapping to one source, use `source\|remote\|local`. Aurral applies these mappings at runtime. Edit them under **Settings > Download Clients > Remote Path Mappings**. |
 | `M3U_PATH_MODE` | `local` (default, Aurral paths in `.m3u` files) or `remote` (paths Navidrome can open). |
 | `M3U_PATH_MAPPINGS` | Translate Navidrome playlist paths. Use the format `Aurral path\|Navidrome path`. Separate multiple mappings with `;`. Aurral applies these mappings at runtime. The UI does not show them. |
 
@@ -27,12 +27,12 @@ Most setup happens in the web UI. These variables matter for Docker deployments.
 | -------- | ------- |
 | `TRUST_PROXY` | Set when Aurral is behind a reverse proxy. |
 | `AUTH_PROXY_ENABLED` | Enable reverse-proxy authentication. Default header `x-forwarded-user`. |
-| `AUTH_PROXY_HEADER` | Custom header containing the authenticated username. |
+| `AUTH_PROXY_HEADER` | Custom header that contains the authenticated username. |
 | `AUTH_PROXY_DOMAIN` | Origin of your forwardAuth login page (for example, `https://auth.example.com`). Authelia-style setups need this value. It lets CSP permit the login redirect and complete session reauthentication. |
 | `AUTH_PROXY_TRUSTED_IPS` | Comma-separated proxy IP allowlist for authentication headers. You must set it when you enable proxy authentication. Without it, a direct client can use the identity header to impersonate users. |
-| `AUTH_PROXY_LOGOUT_URL` | Your proxy/IdP's logout endpoint. For Authentik single-application forward auth, use `https://aurral.example.com/outpost.goauthentik.io/sign_out`. When set, logging out of Aurral also ends the proxy-level session. |
+| `AUTH_PROXY_LOGOUT_URL` | Your proxy or IdP logout endpoint. For Authentik single-application forward auth, use `https://aurral.example.com/outpost.goauthentik.io/sign_out`. This value ends the proxy session when you log out of Aurral. |
 | `AUTH_PROXY_DEFAULT_ROLE` | Role for proxy-auth users who do not otherwise have the admin role: `user` or `admin`. Aurral evaluates the role on every request. |
-| `AUTH_PROXY_ADMIN_USERS` | Comma-separated usernames always granted admin. Re-checked on every request, so removing a username here demotes them on their next request. |
+| `AUTH_PROXY_ADMIN_USERS` | Comma-separated usernames that get the admin role. Aurral checks the list on each request. If you remove a username, Aurral changes that user on the next request. |
 | `AUTH_PROXY_ROLE_HEADER` | Optional header that contains the user's group membership (for example, Authelia's `Remote-Groups`). Usually, this is a comma-separated list. Aurral compares it with `AUTH_PROXY_ADMIN_GROUPS` on every request. |
 | `AUTH_PROXY_ADMIN_GROUPS` | Comma-separated group names that give the admin role. Aurral compares these names with `AUTH_PROXY_ROLE_HEADER`. A group named `admin` has no special function unless you list it here. |
 | `SESSION_EXPIRY_HOURS` | Password-login session lifetime in hours. Default `720` (30 days). |
@@ -41,7 +41,7 @@ Most setup happens in the web UI. These variables matter for Docker deployments.
 
 | Variable | Purpose |
 | -------- | ------- |
-| `AURRAL_VERBOSE_LOGS` | Fuller server logs while troubleshooting. |
+| `AURRAL_VERBOSE_LOGS` | Detailed server logs for problem analysis. |
 
 ## Image proxy
 
@@ -53,11 +53,11 @@ Most setup happens in the web UI. These variables matter for Docker deployments.
 
 | Variable | Purpose |
 | -------- | ------- |
-| `AURRAL_LASTFM_TIMEOUT_MS` | Per-request timeout for Last.fm API calls in milliseconds. Default `15000`. Increase if focus playlists are missing tracks and logs show `ECONNABORTED` errors. |
+| `AURRAL_LASTFM_TIMEOUT_MS` | Last.fm API timeout in milliseconds. Default `15000`. Increase this value if focus playlists have no tracks and logs show `ECONNABORTED`. |
 
 ## Spotify playlist import
 
-Optional overrides for the shared Lidarr Spotify OAuth proxy. Defaults work for most installs.
+These variables change the shared Lidarr Spotify OAuth proxy. The default values are correct for most installations.
 
 | Variable | Purpose |
 | -------- | ------- |

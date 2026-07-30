@@ -1,74 +1,51 @@
 ---
-title: Welcome
-description: Start here for Aurral documentation.
+title: Aurral Docs
+description: Install, configure, and use Aurral.
 ---
 
 import { Card, CardGrid } from "@astrojs/starlight/components";
 
-Aurral is the **Lidarr companion for music discovery**. It adds recommendations, requests, flows, and playlist downloads on top of your existing Lidarr stack, and keeps generated music out of your main library.
+Aurral is a self-hosted companion for music discovery. It adds recommendations, requests, flows, and playlist downloads to a Lidarr-based music stack.
 
-Use this page as a starting point for setup, day-to-day use, integrations, and administration.
+![Aurral Discover page](../../assets/screenshots/discover.webp)
 
-## Start Here
+## Get started
+
+1. [Install Aurral with Docker](/getting-started/docker/).
+2. [Match Lidarr's media mount](/getting-started/storage/) so Aurral can find existing files.
+3. [Complete first-run setup](/getting-started/first-run/).
+4. Connect the services that you use.
+
+## How Aurral fits
+
+**Discover. Download. Listen.**
+
+Aurral manages discovery and generated playlists. Lidarr stores the permanent library state. Navidrome or Plex can play the audio files.
+
+## Essential guides
 
 <CardGrid>
-  <Card title="Install with Docker" icon="setting">
-    Run Aurral with the same media mount as Lidarr. [Open Docker setup](/getting-started/docker/)
-  </Card>
-  <Card title="Match Lidarr" icon="document">
-    One rule: mount what Lidarr mounts. [Open storage guide](/getting-started/storage/)
-  </Card>
-  <Card title="Use the app" icon="rocket">
-    Learn Discover, Search, Library, Playlists, Activity, Shows, Profile, and Settings. [Open app
+  <Card title="Use the app">
+    Learn about Discover, Search, Library, Playlists, Activity, Shows, Profile, and Settings. [App
     overview](/using/overview/)
   </Card>
-  <Card title="Build the stack" icon="open-book">
-    A discovery-first workflow for Aurral, Lidarr, Navidrome, and Tailscale. [Open self-hosting
-    guide](/guides/self-hosting/)
+  <Card title="Create playlists">
+    Build a scheduled flow or import a fixed playlist. [Playlists and flows](/using/playlists/)
+  </Card>
+  <Card title="Connect Lidarr">
+    Configure requests, queue status, and file reuse. [Lidarr
+    integration](/integrations/lidarr/)
+  </Card>
+  <Card title="Run Aurral">
+    Storage, users, environment variables, and troubleshooting. [Administration](/admin/storage/)
   </Card>
 </CardGrid>
 
-## What Aurral Does
+## Tools
 
-<CardGrid>
-  <Card title="Discover" icon="rocket">
-    Recommendations, trends, tags, discover playlists, recent releases, and nearby shows. [Read
-    Discover](/using/discover/)
-  </Card>
-  <Card title="Playlists" icon="list-format">
-    Scheduled flows, Spotify connect imports, static JSON imports, and Navidrome or Plex playback.
-    [Read Playlists](/using/playlists/)
-  </Card>
-  <Card title="Activity" icon="document">
-    Queue and history for Lidarr requests, yt-dlp / slskd / Usenet downloads, and Aurral playlist
-    jobs. [Read Activity](/using/activity/)
-  </Card>
-  <Card title="Integrations" icon="setting">
-    Lidarr, Last.fm, ListenBrainz, Koito, yt-dlp, slskd, SABnzbd/NZBGet, Navidrome, Plex,
-    Ticketmaster, Gotify, and webhooks. [Read integrations](/integrations/lidarr/)
-  </Card>
-  <Card title="Administration" icon="document">
-    Storage, users, environment variables, troubleshooting, and operational details. [Read
-    administration](/admin/storage/)
-  </Card>
-</CardGrid>
+Import a playlist without Spotify Connect using the [Spotify CSV converter](/tools/spotify-csv-converter/).
 
-## Recommended Stack
-
-| Service                   | Role                                                        | Required               |
-| ------------------------- | ----------------------------------------------------------- | ---------------------- |
-| Lidarr                    | Library management, artist and album requests, queue status | Yes                    |
-| Last.fm                   | Personalized discovery, tags, similar artists               | Recommended            |
-| ListenBrainz              | Optional per-user listening history                         | No                     |
-| Koito                     | Self-hosted per-user listening history                      | No                     |
-| slskd                     | Soulseek-backed downloads for flows and playlists           | For Soulseek downloads |
-| yt-dlp                    | YouTube/web fallback downloads for flows and playlists      | Default when installed |
-| Prowlarr + SABnzbd/NZBGet | Usenet-backed downloads for flows and playlists             | For Usenet downloads   |
-| Navidrome                 | Streaming generated playlists (M3U)                         | No                     |
-| Plex                      | Flow playlists in Plexamp                                   | No                     |
-| Ticketmaster              | Local concert recommendations                               | No                     |
-
-## Useful Links
+## Links
 
 - [aurral.org](https://aurral.org)
 - [GitHub](https://github.com/lklynet/aurral)

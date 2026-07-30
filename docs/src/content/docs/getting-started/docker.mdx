@@ -1,9 +1,11 @@
 ---
-title: Docker setup
+title: Docker Setup
 description: Run Aurral with Docker as a Lidarr companion.
 ---
 
-Aurral is Docker-first. It needs two mounts: its own `/config`, and the **same media root Lidarr uses** (usually `/data`).
+Aurral runs in Docker. It needs a `/config` mount for app data.
+
+Aurral also needs the **same media root that Lidarr uses**. Most installations use `/data`.
 
 ## Minimal compose file
 
@@ -30,16 +32,20 @@ Point `/data:/data` at the host path that Lidarr mounts. `./config` holds Aurral
 docker compose up -d
 ```
 
-Open `http://localhost:3001`, create your admin account, and connect Lidarr.
+1. Open `http://localhost:3001`.
+2. Create your admin account.
+3. Connect Lidarr.
 
 ## What the mounts do
 
 | Mount             | Container path | Purpose                                        |
 | ----------------- | -------------- | ---------------------------------------------- |
-| Lidarr media root | `/data`        | Same path view as Lidarr (library + downloads) |
+| Lidarr media root | `/data`        | Same path view as Lidarr for the library and downloads |
 | Host config dir   | `/config`      | Aurral database, settings, users, and jobs     |
 
-Set the downloads path in **Settings → Download Clients → Downloads Folder → Path** (for example `/data/downloads/aurral`). It must sit under the media mount.
+Set the downloads path in **Settings > Download Clients > Downloads Folder > Path**. For example, use `/data/downloads/aurral`.
+
+The downloads path must be under the media mount.
 
 :::note
 `/config` replaces the older `/app/backend/data` path from Aurral v1. At startup, Aurral automatically detects existing databases in either location.
@@ -47,8 +53,8 @@ Set the downloads path in **Settings → Download Clients → Downloads Folder �
 
 ## Full stack
 
-For Lidarr, slskd, and Navidrome together, start from [`docker-compose.example.yml`](https://github.com/lklynet/aurral/blob/main/docker-compose.example.yml).
+Use [`docker-compose.example.yml`](https://github.com/lklynet/aurral/blob/main/docker-compose.example.yml) for a stack with Lidarr, slskd, and Navidrome.
 
-Match Lidarr's media mount. Details and Servarr links: [Match Lidarr](/getting-started/storage/).
+Match Lidarr's media mount. See [Match Lidarr](/getting-started/storage/) for details and Servarr links.
 
 Next: [Match Lidarr](/getting-started/storage/)

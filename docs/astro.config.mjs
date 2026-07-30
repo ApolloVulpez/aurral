@@ -6,7 +6,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "Aurral",
-      description: "Documentation for Aurral — self-hosted music discovery for the Lidarr stack.",
+      description: "Documentation for Aurral: self-hosted music discovery for the Lidarr stack.",
       logo: {
         alt: "Aurral",
         src: "./src/assets/logo.svg",
@@ -28,54 +28,24 @@ export default defineConfig({
           href: "https://discord.gg/cpPYfgVURJ",
         },
       ],
-      head: [
-        {
-          tag: "link",
-          attrs: {
-            rel: "preconnect",
-            href: "https://fonts.googleapis.com",
-          },
-        },
-        {
-          tag: "link",
-          attrs: {
-            rel: "preconnect",
-            href: "https://fonts.gstatic.com",
-            crossorigin: true,
-          },
-        },
-        {
-          tag: "link",
-          attrs: {
-            rel: "stylesheet",
-            href: "https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=JetBrains+Mono:wght@400;500;600&display=swap",
-          },
-        },
-      ],
       components: {
+        Head: "./src/components/Head.astro",
         ThemeSelect: "./src/components/Hidden.astro",
       },
       sidebar: [
+        { label: "Aurral Docs", slug: "index" },
         {
-          label: "aurral.org",
-          link: "https://aurral.org",
-          attrs: { target: "_blank" },
-        },
-        {
-          label: "Guides",
-          items: [{ slug: "guides/self-hosting" }],
-        },
-        {
-          label: "Getting started",
+          label: "Get started",
+          collapsed: true,
           items: [
-            { slug: "index" },
             { slug: "getting-started/docker" },
             { slug: "getting-started/storage" },
             { slug: "getting-started/first-run" },
           ],
         },
         {
-          label: "Using Aurral",
+          label: "Use Aurral",
+          collapsed: true,
           items: [
             { slug: "using/overview" },
             { slug: "using/discover" },
@@ -84,10 +54,12 @@ export default defineConfig({
             { slug: "using/flows" },
             { slug: "using/playlist-imports" },
             { slug: "using/activity" },
+            { slug: "tools/spotify-csv-converter" },
           ],
         },
         {
           label: "Integrations",
+          collapsed: true,
           items: [
             { slug: "integrations/lidarr" },
             { slug: "integrations/lastfm" },
@@ -104,6 +76,7 @@ export default defineConfig({
         },
         {
           label: "Administration",
+          collapsed: true,
           items: [
             { slug: "admin/storage" },
             { slug: "admin/users" },
@@ -111,6 +84,7 @@ export default defineConfig({
             { slug: "admin/troubleshooting" },
           ],
         },
+        { label: "Sponsorship", slug: "sponsorship" },
       ],
     }),
   ],

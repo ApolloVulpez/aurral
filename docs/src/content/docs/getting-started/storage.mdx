@@ -3,9 +3,9 @@ title: Match Lidarr
 description: Mount Aurral like Lidarr. Same media root, same path view.
 ---
 
-Aurral is a **Lidarr companion**. Storage follows Lidarr, not a separate Aurral layout.
+Aurral is a **Lidarr companion**. Aurral uses the Lidarr storage layout.
 
-If Lidarr downloads and your player sees its library, mount that same media root into Aurral. This completes the filesystem setup.
+If your player sees the Lidarr library, mount the same media root into Aurral.
 
 ## The rule
 
@@ -19,17 +19,21 @@ volumes:
 
 `/config` is Aurral-only (database, settings, secrets). Do not share it with Lidarr.
 
-For path planning, hardlinks, and permissions, use the Servarr guides:
+For path design, hardlinks, and permissions, use the Servarr guides:
 
 - [Servarr Docker Guide](https://wiki.servarr.com/docker-guide): one common volume, consistent paths
 - [Lidarr Docker notes](https://lidarr.audio/#downloads-v1-docker): same `/data` advice for Lidarr images
 
 ## After the mount
 
-1. In **Settings → Download Clients → Downloads Folder → Path**, set a folder under that root (for example `/data/downloads/aurral`).
-2. Connect Lidarr and run **Test library access**.
-3. If you use Navidrome, add Aurral's downloads path as a music folder.
-4. If you use Plex, let Aurral register the downloads path.
+1. Open **Settings > Download Clients > Downloads Folder > Path**.
+2. Set a folder under the media root.
+3. Connect Lidarr.
+4. Run **Test library access**.
+5. If you use Navidrome, add the Aurral downloads path as a music folder.
+6. If you use Plex, let Aurral register the downloads path.
+
+For example, set the downloads path to `/data/downloads/aurral`.
 
 A scan of only the Lidarr library does not include Aurral output.
 
@@ -37,16 +41,16 @@ yt-dlp writes directly into that downloads path. If Lidarr shares `/data` with s
 
 ## Example layout
 
-This is the usual Servarr-style tree. Yours can differ as long as every container sees the same paths.
+This example uses the standard Servarr layout. You can use a different layout if all containers see the same paths.
 
 ```
 /data/
-├── music/                 # Lidarr root folder
-└── downloads/
-    ├── slskd/complete/    # slskd finished downloads (if used)
-    ├── nzbget/completed/  # optional Usenet completed
-    └── aurral/            # Aurral Downloads Folder path
-        └── aurral-weekly-flow/
+|-- music/                 # Lidarr root folder
+\-- downloads/
+    |-- slskd/complete/    # slskd finished downloads (if used)
+    |-- nzbget/completed/  # optional Usenet completed
+    \-- aurral/            # Aurral Downloads Folder path
+        \-- aurral-weekly-flow/
 ```
 
 | Service        | Mount            | Notes                                               |
@@ -62,9 +66,9 @@ App state stays in `./config:/config` and is not shared.
 
 ## Windows and mixed Docker setups
 
-When Lidarr or a download client runs on Windows and Aurral runs in Docker, reported paths like `N:\Music\...` are not readable inside the container.
+If Lidarr runs on Windows, it can report a path such as `N:\Music\...`. Aurral cannot read this path in Docker.
 
-Mount the Windows folder into Aurral and add a mapping under **Settings → Download Clients → Remote Path Mappings**:
+Mount the Windows folder into Aurral:
 
 ```yaml
 services:
@@ -76,20 +80,24 @@ services:
 
 Example mapping: map the remote path `N:/ServerFolders/Music` to the local path `/music`.
 
-You can also set `PATH_MAPPINGS=N:/ServerFolders/Music|/music` in the Compose file. Aurral applies it at runtime. Edit it in the UI afterward.
+Add this mapping under **Settings > Download Clients > Remote Path Mappings**.
 
-Then run **Settings → Lidarr → Test library access**.
+You can also set `PATH_MAPPINGS=N:/ServerFolders/Music|/music` in the Compose file. Aurral applies the value at runtime.
+
+You can edit the mapping in the UI after Aurral starts.
+
+Then run **Settings > Lidarr > Test library access**.
 
 :::note
-Compose `PATH_MAPPINGS` do not appear as environment fields in the UI. Use **Settings → Download Clients → Remote Path Mappings** to view or edit them.
+Compose `PATH_MAPPINGS` do not appear as environment fields in the UI. Use **Settings > Download Clients > Remote Path Mappings** to view or edit them.
 :::
 
 ## When the player sees different paths
 
-If Navidrome's path view differs from Aurral's, use **Use Navidrome paths in M3U files** under **Settings → Playback → Navidrome**. For Plex, set **Plex downloads path** under **Settings → Playback → Plex**.
+If Navidrome uses different paths, enable **Use Navidrome paths in M3U files** under **Settings > Playback > Navidrome**.
+
+If Plex uses different paths, set **Plex downloads path** under **Settings > Playback > Plex**.
 
 See [Navidrome](/integrations/navidrome/) and [Plex](/integrations/plex/).
-
----
 
 Next: [First run](/getting-started/first-run/)

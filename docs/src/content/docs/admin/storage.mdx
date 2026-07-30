@@ -1,29 +1,29 @@
 ---
-title: Storage & backups
+title: Storage and backups
 description: App data, media mounts, and what to back up.
 ---
 
 Aurral keeps app state and generated music separate.
 
-For mounts, follow [Match Lidarr](/getting-started/storage/): same media root as Lidarr, downloads path set in the UI.
+For mounts, follow [Match Lidarr](/getting-started/storage/). Use the Lidarr media root and set the downloads path in the UI.
 
-## What lives where
+## Storage locations
 
 | Path                             | Contains                                                                                                                                                                   |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/config`                        | Database, settings, users, sessions, cache state, and playlist jobs. Mount it with `./config:/config`. Do not share it with other apps.                                    |
 | `/data` (or Lidarr's media root) | Shared library and downloads. Same mount Lidarr uses.                                                                                                                      |
-| Downloads Folder                 | Generated flows, imported playlists, staging, and playlist files. Set in **Settings → Download Clients → Downloads Folder → Path** (for example `/data/downloads/aurral`). |
+| Downloads Folder                 | Generated flows, imported playlists, staging, and playlist files. Set in **Settings > Download Clients > Downloads Folder > Path** (for example `/data/downloads/aurral`). |
 
 :::note
 `/config` replaces the older `/app/backend/data` path from Aurral v1. At startup, Aurral automatically detects existing databases in either location.
 :::
 
-## Back up
+## Back up your data
 
-- Your mounted `/config` folder
-- The host folder behind your Downloads Folder path if you want generated playlists to survive rebuilds
-- Your compose file and `.env`
+- Back up the mounted `/config` folder.
+- Back up the Downloads Folder if you want to keep generated playlists after a rebuild.
+- Back up the Compose file and `.env` file.
 
 ## Library safety
 

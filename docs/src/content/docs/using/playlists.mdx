@@ -3,7 +3,9 @@ title: Playlists overview
 description: Flows, static imports, and how they differ.
 ---
 
-The **Playlists** page is where flows and imported playlists live. Both download into Aurral's own folder under `aurral-weekly-flow` and do not write directly into your main music library.
+The **Playlists** page contains flows and imported playlists. Both types use the Aurral folder under `aurral-weekly-flow`.
+
+Aurral does not write these files to your main music library.
 
 ![Aurral playlists](../../../assets/screenshots/playlists.webp)
 
@@ -16,9 +18,11 @@ The **Playlists** page is where flows and imported playlists live. Both download
 | Controls  | Schedule, source mix, focus, deep dive | None of the flow controls        |
 | Worker    | Shared download worker                 | Shared download worker           |
 
-Flows are dynamic playlists that refresh automatically based on your listening context and flow recipe. Static playlists come from Spotify, imported JSON, or exported flow tracklists.
+Flows refresh on a schedule and use your flow settings. Static playlists come from Spotify, JSON files, or exported flow tracklists.
 
-When a playlist track exhausts its download candidates and sources, it remains failed across Aurral restarts. Use **Re-search missing** from the playlist menu when you want to try those tracks again.
+If all download sources fail, the track stays in the failed state after an Aurral restart.
+
+Select **Re-search missing** from the playlist menu to try the track again.
 
 ## Import and Lidarr sync
 
@@ -28,13 +32,19 @@ Flows can expose a **Lidarr import URL** so Lidarr polls the current flow trackl
 
 ## Where files go
 
-Generated playlists go under your Downloads Folder path. Set this path in **Settings → Download Clients**. Usually, the path is:
+Generated playlists go under your Downloads Folder path. Set this path in **Settings > Download Clients**. Usually, the path is:
 
 ```text
 /data/downloads/aurral/aurral-weekly-flow/<playlist-id>/
 ```
 
-Navidrome can scan that tree and play `.m3u` playlists. Plex can index the track folders and receive API-synced playlists for Plexamp. See [Navidrome](/integrations/navidrome/), [Plex](/integrations/plex/), [yt-dlp](/integrations/ytdlp/), [slskd](/integrations/slskd/), [Usenet](/integrations/usenet/), and [Match Lidarr](/getting-started/storage/).
+Navidrome can scan that tree and play `.m3u` playlists. Plex can index the track folders and create playlists for Plexamp.
+
+See [Navidrome](/integrations/navidrome/) and [Plex](/integrations/plex/) for playback setup.
+
+See [yt-dlp](/integrations/ytdlp/), [slskd](/integrations/slskd/), and [Usenet](/integrations/usenet/) for download setup.
+
+See [Match Lidarr](/getting-started/storage/) for storage setup.
 
 ## Next steps
 

@@ -1,0 +1,20 @@
+---
+const { head } = Astro.locals.starlightRoute;
+const pageTitle = head
+  .find(({ tag }) => tag === "title")
+  ?.content?.replace(/ \| Aurral$/, "");
+const section = [
+  ["/getting-started/", "Getting Started"],
+  ["/using/", "Using Aurral"],
+  ["/tools/", "Using Aurral"],
+  ["/integrations/", "Integrations"],
+  ["/admin/", "Administration"],
+].find(([path]) => Astro.url.pathname.startsWith(path))?.[1];
+const documentTitle = pageTitle && section ? `${pageTitle} - ${section}` : pageTitle;
+---
+
+{
+  head.map(({ tag: Tag, attrs, content }) =>
+    Tag === "title" ? <title>{documentTitle}</title> : <Tag {...attrs} set:html={content} />,
+  )
+}

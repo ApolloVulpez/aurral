@@ -1,0 +1,21 @@
+---
+title: Spotify CSV converter
+description: Convert an Exportify CSV playlist into JSON that Aurral can import.
+---
+
+import SpotifyCsvConverter from "../../../components/SpotifyCsvConverter.astro";
+
+Use this converter when Spotify Connect is not available. Your browser converts the file and does not upload it.
+
+1. Export the playlist from [Exportify](https://exportify.net/).
+2. Convert the downloaded `.csv` file below.
+3. In Aurral, open **Playlists > Import playlist > JSON file**.
+4. Select the downloaded JSON file.
+
+<SpotifyCsvConverter />
+
+The converter recognizes common Spotify headers such as `Track Name`, `Artist Name(s)`, and `Album Name`.
+
+The converter ignores rows that do not have an artist name and a track name.
+
+For Spotify Connect, accepted JSON formats, retries, and existing-file reuse, see [Playlist imports](/using/playlist-imports/).

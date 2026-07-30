@@ -2,546 +2,239 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Aurral | The Lidarr companion for music discovery</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aurral</title>
     <meta
       name="description"
-      content="Aurral is the Lidarr companion for self-hosted music discovery. Best-in-class recommendations, flows, and playlist downloads, built on the stack you already trust."
+      content="Aurral is the Lidarr companion for self-hosted music discovery."
     />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="styles.css" />
+    <meta name="theme-color" content="#121212" />
     <link
       rel="icon"
       type="image/svg+xml"
-      href="https://raw.githubusercontent.com/lklynet/aurral/refs/heads/main/frontend/public/arralogo.svg"
+      href="favicon.svg"
     />
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        background: #121212;
+        color: #8e9489;
+        margin: 0;
+      }
+
+      main {
+        align-items: center;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-height: 100svh;
+        padding: clamp(1rem, 4vw, 3rem);
+      }
+
+      .terminal {
+        border: 1px solid #394036;
+        border-radius: 0.55rem;
+        overflow: hidden;
+        width: min(70rem, 100%);
+      }
+
+      .terminal-bar {
+        align-items: center;
+        display: grid;
+        font-size: clamp(0.55rem, 1vw, 0.72rem);
+        letter-spacing: 0.06em;
+        min-height: 2.7rem;
+        padding: 0 1rem;
+      }
+
+      .terminal-bar {
+        border-bottom: 1px dashed #30372d;
+        grid-template-columns: 1fr auto 1fr;
+      }
+
+      .terminal-controls {
+        display: flex;
+        gap: 0.55rem;
+      }
+
+      .terminal-controls b {
+        font-weight: 500;
+      }
+
+      .terminal-controls b:first-child {
+        color: #ff6b64;
+      }
+
+      .terminal-controls b:nth-child(2) {
+        color: #f2bd4b;
+      }
+
+      .terminal-controls b:last-child {
+        color: #48ca65;
+      }
+
+      .terminal-title {
+        color: #c9cec4;
+      }
+
+      .stage {
+        align-items: center;
+        aspect-ratio: 16 / 9;
+        display: flex;
+        justify-content: center;
+        overflow: hidden;
+      }
+
+      .ascii-stack {
+        display: grid;
+      }
+
+      pre {
+        flex: 0 0 auto;
+        font: 600 clamp(3.5px, 0.9vw, 12px) / 0.88 ui-monospace, SFMono-Regular, Menlo, Monaco,
+          Consolas, monospace;
+        grid-area: 1 / 1;
+        margin: 0;
+        user-select: none;
+      }
+
+      .ascii-base {
+        color: #65a30d;
+      }
+
+      .ascii-highlight {
+        color: #a3e635;
+      }
+
+      nav {
+        display: flex;
+        gap: clamp(0.8rem, 2vw, 1.5rem);
+      }
+
+      a {
+        color: #84cc16;
+        text-decoration-color: transparent;
+        text-underline-offset: 0.3em;
+      }
+
+      a:hover,
+      a:focus-visible {
+        color: #b5ec5a;
+        text-decoration-color: currentColor;
+      }
+
+      .tagline {
+        font-family: system-ui, sans-serif;
+        font-size: clamp(0.8rem, 1.2vw, 1rem);
+        margin: clamp(1.25rem, 3vw, 2rem) 0 0;
+        text-align: center;
+      }
+
+      .actions {
+        justify-content: center;
+        margin-top: 1rem;
+      }
+
+      .button {
+        border: 1px solid #46503f;
+        border-radius: 0.25rem;
+        padding: 0.55rem 0.9rem;
+        text-decoration: none;
+      }
+
+      .button:hover,
+      .button:focus-visible {
+        border-color: #84cc16;
+      }
+
+      @media (max-width: 520px) {
+        main {
+          justify-content: flex-start;
+        }
+
+        .terminal {
+          border-radius: 0.4rem;
+        }
+
+        .terminal-bar {
+          min-height: 2.3rem;
+          padding-inline: 0.65rem;
+        }
+
+        .terminal-bar {
+          grid-template-columns: 1fr auto;
+        }
+      }
+    </style>
   </head>
   <body>
-    <nav>
-      <a href="/" class="logo">
-        <img
-          src="https://raw.githubusercontent.com/lklynet/aurral/refs/heads/main/frontend/public/arralogo.svg"
-          alt="Aurral logo"
-        />
-        <span>Aurral</span>
-      </a>
-
-      <button
-        type="button"
-        class="nav-toggle"
-        aria-expanded="false"
-        aria-controls="site-nav-links"
-        aria-label="Open navigation"
-      >
-        <span class="nav-toggle-icon" aria-hidden="true"><span></span><span></span></span>
-        <span>Menu</span>
-      </button>
-
-      <div class="nav-links" id="site-nav-links">
-        <a href="https://docs.aurral.org/guides/self-hosting/">Guide</a>
-        <a href="https://docs.aurral.org/">Docs</a>
-        <a href="https://docs.aurral.org/using/playlists/">Playlists</a>
-        <a href="aurral-convert.html">CSV Converter</a>
-        <a href="https://docs.aurral.org/getting-started/docker/">Docker Setup</a>
-        <a
-          href="https://github.com/lklynet/aurral"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="btn btn-outline github-btn"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.86 10.93c.58.1.79-.25.79-.56v-2c-3.2.69-3.88-1.37-3.88-1.37-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.68 1.25 3.33.96.1-.75.4-1.25.72-1.54-2.55-.29-5.24-1.27-5.24-5.67 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.15 1.18a10.96 10.96 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.57.23 2.73.11 3.02.74.8 1.18 1.83 1.18 3.08 0 4.41-2.7 5.38-5.27 5.66.41.36.78 1.06.78 2.13v3.16c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"
-            />
-          </svg>
-          GitHub
-          <span class="github-stars-badge">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              aria-hidden="true"
-            >
-              <polygon
-                points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
-              />
-            </svg>
-            <span class="github-stars-count">...</span>
-          </span>
-        </a>
-      </div>
-    </nav>
-
-    <header class="hero hero-home">
-      <div class="hero-grid" aria-hidden="true"></div>
-
-      <div class="hero-float">
-        <a
-          href="https://github.com/Lidarr/Lidarr"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="hero-float-mark hf-lidarr"
-          aria-label="Lidarr"
-        >
-          <img src="icons/lidarr.svg" alt="" />
-        </a>
-        <a
-          href="https://slsknet.org/"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="hero-float-mark hf-soulseek"
-          aria-label="Soulseek"
-        >
-          <img src="icons/soulseek.svg" alt="" />
-        </a>
-        <a
-          href="https://github.com/navidrome/navidrome"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="hero-float-mark hf-navidrome"
-          aria-label="Navidrome"
-        >
-          <img src="icons/navidrome.svg" alt="" />
-        </a>
-        <a
-          href="https://last.fm"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="hero-float-mark hf-lastfm"
-          aria-label="Last.fm"
-        >
-          <img src="icons/last-fm.svg" alt="" />
-        </a>
-      </div>
-
-      <div class="hero-inner">
-        <h1>The Lidarr companion for music discovery.</h1>
-        <p>
-          Best-in-class recommendations, flows, and playlist downloads. Built on Lidarr, not instead of
-          it. Expand the stack you already trust.
-        </p>
-
-        <div class="hero-actions">
-          <a href="https://docs.aurral.org/getting-started/docker/" class="btn">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              aria-hidden="true"
-            >
-              <path
-                d="M13.53 11.29 20 4.82V18a2 2 0 0 1-2 2H4.82l6.47-6.47 1.41 1.41L8.64 19H18a1 1 0 0 0 1-1V7.64l-4.06 4.06z"
-              />
-              <path d="m14.94 4.94 1.41 1.41-9.9 9.9H5.04v-1.41z" />
-            </svg>
-            Start with Docker
-          </a>
-          <a href="https://docs.aurral.org/" class="btn btn-outline"> Read the docs </a>
-          <a
-            href="https://github.com/lklynet/aurral"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="btn btn-outline"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              aria-hidden="true"
-            >
-              <path
-                d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.86 10.93c.58.1.79-.25.79-.56v-2c-3.2.69-3.88-1.37-3.88-1.37-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.68 1.25 3.33.96.1-.75.4-1.25.72-1.54-2.55-.29-5.24-1.27-5.24-5.67 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.15 1.18a10.96 10.96 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.57.23 2.73.11 3.02.74.8 1.18 1.83 1.18 3.08 0 4.41-2.7 5.38-5.27 5.66.41.36.78 1.06.78 2.13v3.16c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"
-              />
-            </svg>
-            Star on GitHub
-          </a>
-        </div>
-
-        <div class="hero-preview">
-          <figure class="hero-screenshot-frame">
-            <img
-              src="https://raw.githubusercontent.com/lklynet/aurral/refs/heads/main/docs/src/assets/screenshots/discover.webp"
-              alt="Aurral discover page"
-              class="screenshot"
-              loading="lazy"
-              decoding="async"
-            />
-          </figure>
-        </div>
-      </div>
-    </header>
-
     <main>
-      <section id="features" class="section-block">
-        <div class="section-head">
-          <h2>Multiple ways to listen.</h2>
-          <p>
-            Monitor artists and albums in Lidarr, import fixed playlists, run scheduled flows, and
-            adopt discover playlists like Release Radar.
-          </p>
+      <section class="terminal" aria-label="Aurral terminal">
+        <header class="terminal-bar">
+          <span class="terminal-controls" aria-hidden="true">
+            <b>[x]</b><b>[-]</b><b>[+]</b>
+          </span>
+          <span class="terminal-title">♫ aurral</span>
+        </header>
+
+        <div
+          class="stage"
+          role="img"
+          aria-label="A rotating Aurral logo rendered as ASCII art"
+        >
+          <div class="ascii-stack" aria-hidden="true">
+            <pre class="ascii-base" data-ascii-base></pre>
+            <pre class="ascii-highlight" data-ascii-highlight></pre>
+          </div>
+          <noscript>Aurral</noscript>
         </div>
 
-        <div class="feature-columns feature-columns--quad">
-          <article>
-            <h3>Discover</h3>
-            <p>
-              Best-in-class, library-aware recommendations, trends, tags, and discover playlists.
-              <a href="https://docs.aurral.org/using/discover/">Learn more</a>.
-            </p>
-          </article>
-          <article>
-            <h3>Artists &amp; albums</h3>
-            <p>
-              Search, preview tracks, and add to Lidarr with your defaults.
-              <a href="https://docs.aurral.org/integrations/lidarr/">Lidarr integration</a>.
-            </p>
-          </article>
-          <article>
-            <h3>Static playlists</h3>
-            <p>
-              Connect Spotify in-app or import fixed JSON playlists when you want exact tracks.
-              <a href="https://docs.aurral.org/using/playlist-imports/">Learn about imports</a>.
-            </p>
-          </article>
-          <article>
-            <h3>Flows</h3>
-            <p>
-              Spin up automated flows from your library and listening history. Feed Lidarr from any flow.
-              <a href="https://docs.aurral.org/using/flows/">Learn about flows</a>.
-            </p>
-          </article>
-        </div>
       </section>
 
-      <section id="integrations" class="section-block">
-        <div class="section-head">
-          <h2>Built on Lidarr. Not a replacement for it.</h2>
-          <p>
-            Lidarr has years of hardening, plugins, and community behind it. Aurral is the discovery
-            layer that plugs into that stack and is meant to stick around.
-          </p>
-        </div>
-
-        <div class="integration-grid">
-          <a
-            href="https://github.com/Lidarr/Lidarr"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="integration-card"
-          >
-            <div class="integration-mark">
-              <img src="icons/lidarr.svg" alt="" loading="lazy" decoding="async" />
-            </div>
-            <div class="integration-copy">
-              <h3>Lidarr</h3>
-              <p>The library engine we build on. Requests, monitor modes, and status tracking.</p>
-              <code>Library foundation</code>
-            </div>
-          </a>
-
-          <a
-            href="https://github.com/slskd/slskd"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="integration-card"
-          >
-            <div class="integration-mark">
-              <img src="icons/slskd.svg" alt="" loading="lazy" decoding="async" />
-            </div>
-            <div class="integration-copy">
-              <h3>slskd</h3>
-              <p>Handles Soulseek-backed downloads for flows and playlists.</p>
-              <code>Acquisition layer</code>
-            </div>
-          </a>
-
-          <a
-            href="https://github.com/navidrome/navidrome"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="integration-card"
-          >
-            <div class="integration-mark">
-              <img src="icons/navidrome.svg" alt="" loading="lazy" decoding="async" />
-            </div>
-            <div class="integration-copy">
-              <h3>Navidrome</h3>
-              <p>Delivers generated playlists and flows to playback.</p>
-              <code>Playback destination</code>
-            </div>
-          </a>
-
-          <a
-            href="https://last.fm"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="integration-card"
-          >
-            <div class="integration-mark">
-              <img src="icons/last-fm.svg" alt="" loading="lazy" decoding="async" />
-            </div>
-            <div class="integration-copy">
-              <h3>Last.fm</h3>
-              <p>Adds listening context back into discovery.</p>
-              <code>Recommendation context</code>
-            </div>
-          </a>
-        </div>
-      </section>
-
-      <section id="workflow" class="section-block workflow-section">
-        <div class="workflow-visual">
-          <div class="workflow-card">
-            <div class="workflow-card-head">
-              <span class="workflow-status">Flow pipeline</span>
-              <span class="workflow-branch">discover-weekly</span>
-            </div>
-            <div class="workflow-steps">
-              <div class="workflow-step">
-                <span class="workflow-step-index">01</span>
-                <div>
-                  <strong>Discover</strong>
-                  <p>Score artists against your library, listening context, and trends.</p>
-                </div>
-              </div>
-              <div class="workflow-step">
-                <span class="workflow-step-index">02</span>
-                <div>
-                  <strong>Download</strong>
-                  <p>Queue tracks through slskd with retry logic for playlist and flow behavior.</p>
-                </div>
-              </div>
-              <div class="workflow-step">
-                <span class="workflow-step-index">03</span>
-                <div>
-                  <strong>Listen</strong>
-                  <p>Refresh static playlists or weekly flows and surface them in Navidrome.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="workflow-copy">
-          <div class="section-head">
-            <h2>One interface from recommendation to playback.</h2>
-            <p>
-              We stand by our recommendation engine. See what fits your library, then download and
-              listen without reinventing the rest of your stack.
-            </p>
-          </div>
-
-          <ul class="feature-list">
-            <li>See library state before you request.</li>
-            <li>
-              Track Lidarr requests, slskd downloads, and playlist jobs in <strong>History</strong>.
-            </li>
-            <li>Run weekly flows and static playlists side by side.</li>
-            <li>
-              Connect Spotify playlists in Aurral, or use the <a href="aurral-convert.html">CSV converter</a> as a
-              fallback. See the <a href="https://docs.aurral.org/using/playlist-imports/">import guide</a>.
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <section id="setup" class="section-block setup-section">
-        <div class="section-head open-head">
-          <h2>Open source. Docker first. Built to just work.</h2>
-          <p>Match Lidarr's media mount, connect your stack, and start discovering.</p>
-        </div>
-
-        <div class="setup-grid">
-          <div class="terminal-card">
-            <div class="terminal-head">
-              <span></span>
-              <span></span>
-              <span></span>
-              <div class="terminal-title">~/media/aurral</div>
-            </div>
-
-            <div class="terminal-body">
-              <div><span class="prompt">$</span> docker compose up -d</div>
-              <div class="dim">Starting aurral ... done</div>
-              <div><span class="prompt">$</span> open http://localhost:3001</div>
-              <div class="dim">Complete onboarding: admin account, then Lidarr.</div>
-              <div><span class="prompt">$</span> import your first playlist</div>
-              <div class="cursor-line">Aurral is ready<span class="caret"></span></div>
-            </div>
-          </div>
-
-          <div class="stats-grid">
-            <div class="stat-card">
-              <div class="stat-value">MIT</div>
-              <div class="stat-label">License</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-value">Best-in-class</div>
-              <div class="stat-label">Recommendations</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-value github-stars-count">...</div>
-              <div class="stat-label">GitHub stars</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-value">History</div>
-              <div class="stat-label">Unified activity timeline</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="code-block">
-          <button type="button" class="copy-button" data-copy-target="docker-compose-snippet">
-            Copy
-          </button>
-          <pre><code id="docker-compose-snippet">services:
-  aurral:
-    image: ghcr.io/lklynet/aurral:latest
-    restart: unless-stopped
-    ports:
-      - "3001:3001"
-    environment:
-      - PUID=${PUID:-1000}
-      - PGID=${PGID:-1000}
-    volumes:
-      - /data:/data
-      - ./config:/config</code></pre>
-        </div>
-
-        <p class="setup-docs-link">
-          Full setup details:
-          <a href="https://docs.aurral.org/getting-started/docker/">Docker setup</a>,
-          <a href="https://docs.aurral.org/getting-started/storage/">Match Lidarr</a>, and the
-          <a href="https://docs.aurral.org/guides/self-hosting/">self-hosting guide</a>.
-        </p>
-
-        <div class="setup-links">
-          <a
-            href="https://github.com/lklynet/aurral"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="btn btn-outline"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              aria-hidden="true"
-            >
-              <path
-                d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.86 10.93c.58.1.79-.25.79-.56v-2c-3.2.69-3.88-1.37-3.88-1.37-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.68 1.25 3.33.96.1-.75.4-1.25.72-1.54-2.55-.29-5.24-1.27-5.24-5.67 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.15 1.18a10.96 10.96 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.57.23 2.73.11 3.02.74.8 1.18 1.83 1.18 3.08 0 4.41-2.7 5.38-5.27 5.66.41.36.78 1.06.78 2.13v3.16c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"
-              />
-            </svg>
-            Star on GitHub
-          </a>
-          <a
-            href="https://github.com/lklynet/aurral/fork"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="btn btn-outline"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <circle cx="6" cy="6" r="3"></circle>
-              <circle cx="18" cy="6" r="3"></circle>
-              <circle cx="12" cy="18" r="3"></circle>
-              <path d="M8.59 7.51 10.42 15"></path>
-              <path d="M15.41 7.51 13.58 15"></path>
-            </svg>
-            Fork the repo
-          </a>
-          <a href="https://docs.aurral.org/" class="btn btn-outline">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M12 7v14"></path>
-              <path
-                d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"
-              ></path>
-            </svg>
-            Read the docs
-          </a>
-        </div>
-      </section>
+      <p class="tagline">The Lidarr companion for music discovery.</p>
+      <nav class="actions" aria-label="Aurral links">
+        <a class="button" href="https://github.com/lklynet/aurral">GitHub</a>
+        <a class="button" href="https://docs.aurral.org/">Docs</a>
+      </nav>
     </main>
 
-    <section class="final-cta">
-      <div class="final-cta-inner">
-        <h2>Discovery that lasts on the stack that lasts.</h2>
-        <p>Run Aurral with Lidarr. Reliable recommendations, without reinventing the wheel.</p>
-        <div class="hero-actions">
-          <a
-            href="https://github.com/lklynet/aurral"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="btn"
-            >View on GitHub</a
-          >
-          <a href="https://docs.aurral.org/using/playlists/" class="btn btn-outline"
-            >Playlists &amp; flows</a
-          >
-          <a href="https://docs.aurral.org/guides/self-hosting/" class="btn btn-outline"
-            >Self-Hosting Guide</a
-          >
-        </div>
-      </div>
-    </section>
+    <script type="module">
+      const base = document.querySelector("[data-ascii-base]");
+      const highlight = document.querySelector("[data-ascii-highlight]");
 
-    <footer>
-      <p>Aurral is open source software released under the MIT License.</p>
-      <div class="footer-links">
-        <a href="https://docs.aurral.org/guides/self-hosting/">Guide</a>
-        <a href="https://docs.aurral.org/">Docs</a>
-        <a href="https://docs.aurral.org/using/playlists/">Playlists</a>
-        <a href="aurral-convert.html">CSV Converter</a>
-        <a href="https://github.com/lklynet/aurral" target="_blank" rel="noopener noreferrer"
-          >GitHub</a
-        >
-        <a href="https://discord.gg/cpPYfgVURJ" target="_blank" rel="noopener noreferrer"
-          >Discord</a
-        >
-      </div>
-    </footer>
+      fetch("3dsvg-ascii.json")
+        .then((response) => {
+          if (!response.ok) throw new Error(`Animation failed to load: ${response.status}`);
+          return response.json();
+        })
+        .then(({ fps, columns, frames, highlights }) => {
+          base.style.width = `${columns}ch`;
+          highlight.style.width = `${columns}ch`;
+          base.textContent = frames[0];
+          highlight.textContent = highlights[0];
+          if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
-    <script src="main.js"></script>
+          let previous = -1;
+          const animate = (time) => {
+            const frame = Math.floor((time * fps) / 1000) % frames.length;
+            if (frame !== previous) {
+              base.textContent = frames[frame];
+              highlight.textContent = highlights[frame];
+              previous = frame;
+            }
+            requestAnimationFrame(animate);
+          };
+          requestAnimationFrame(animate);
+        })
+        .catch(() => {});
+    </script>
   </body>
 </html>
