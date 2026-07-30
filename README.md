@@ -45,19 +45,7 @@ Aurral is the Lidarr companion for self-hosted music discovery. Best-in-class re
   <img src="docs/src/assets/screenshots/playback.webp" width="205" alt="Aurral artist details and playback" />
   <img src="docs/src/assets/screenshots/search.webp" width="205" alt="Aurral search results" />
   <img src="docs/src/assets/screenshots/playlists.webp" width="205" alt="Aurral playlists" />
-  <img src="docs/src/assets/screenshots/history.webp" width="205" alt="Aurral history timeline" />
 </p>
-
-## Recommended Stack
-
-Aurral needs Lidarr. Everything else is optional. We build on the tools self-hosters already trust, rather than reinventing them:
-
-| App or service                             | Role                                                        |
-| ------------------------------------------ | ----------------------------------------------------------- |
-| [Lidarr](https://github.com/Lidarr/Lidarr) | Library management, artist and album requests, queue status |
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Built-in YouTube/web fallback for flows and playlists       |
-| [slskd](https://github.com/slskd/slskd)    | Optional Soulseek-backed downloads for flows and playlists  |
-| [Navidrome](https://www.navidrome.org)     | Streaming and playback via generated M3U playlists          |
 
 ## Quick Start
 
@@ -84,10 +72,6 @@ Change `/data:/data` to the **same host media path Lidarr already mounts**. If L
 docker compose up -d
 ```
 
-The `latest` tag follows stable Aurral releases. For a reproducible deployment,
-replace it with an exact published version tag, such as
-`ghcr.io/lklynet/aurral:2.0.0`.
-
 Open `http://localhost:3001`, create your admin account, and connect Lidarr.
 
 For a stack with Lidarr, slskd, and Navidrome, see [`docker-compose.example.yml`](docker-compose.example.yml). For Plex, see the [Plex setup guide](https://docs.aurral.org/integrations/plex/).
@@ -113,7 +97,3 @@ Aurral builds on open metadata, listening data, and infrastructure from the proj
 ## Sponsors
 
 ![sponsors badge](https://readme-contribs.as93.net/sponsors/lklynet)
-
-## License
-
-Aurral is released under the [MIT License](LICENSE).
