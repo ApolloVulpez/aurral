@@ -19,6 +19,8 @@ Aurral also writes M3U playlists for your flows and static playlists.
 
 Aurral configures Navidrome through its API. Navidrome must also have access to the audio files on disk.
 
+Aurral embeds playlist metadata into new yt-dlp downloads. On startup, it also repairs older yt-dlp M4A files that have missing or incorrect title, artist, or album tags, then schedules a Navidrome library scan.
+
 ## Mixed Windows and Docker Navidrome
 
 Aurral writes M3U playlists under `aurral-weekly-flow` with one track path per line. Navidrome must be able to open those paths on its filesystem.

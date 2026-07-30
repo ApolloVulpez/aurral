@@ -31,6 +31,8 @@ Aurral ranks results by title, artist, duration, and noise filters. It skips kar
 
 Aurral validates downloaded audio with the same track validation that it uses for other sources.
 
+After validation, Aurral writes the playlist's title, artist, album, album artist, year, and track number into the audio file. This metadata lets tag-based libraries such as Navidrome organize yt-dlp downloads correctly.
+
 When a downloaded file matches the requested track but its duration differs significantly, Aurral retains it under **Activity > Review** for preview, approval, or denial.
 
 Audio from YouTube is usually lossy. Prefer slskd or Usenet when you want higher quality.

@@ -1,5 +1,10 @@
+import { execFile } from "child_process";
+import { promisify } from "util";
 import path from "path";
 import fs from "fs/promises";
+import { parseFile } from "music-metadata";
+
+const execFileAsync = promisify(execFile);
 
 export function sanitizePathPart(value, fallback = "Unknown") {
   const text = String(value || "")
@@ -121,4 +126,86 @@ export async function commitImportToPlaylistLibrary(sourcePath, targetPath) {
     await fs.rm(sourcePath, { force: true });
   }
   return resolvedTarget;
+}
+
+export async function writeAudioMetadata(filePath, metadata = {}) {
+  const sourcePath = path.resolve(filePath);
+  const ext = path.extname(sourcePath) || ".m4a";
+  const taggedPath = path.join(
+    path.dirname(sourcePath),
+    `.${path.basename(sourcePath, ext)}.${process.pid}-${Date.now()}.tagged${ext}`,
+  );
+  const tags = [
+    ["title", metadata.trackName],
+    ["artist", metadata.artistName],
+    ["album_artist", metadata.artistName],
+    ["album", metadata.albumName],
+    ["date", metadata.releaseYear],
+    ["track", normalizePositiveInteger(metadata.trackNumber)],
+  ].filter(([, value]) => value != null && String(value).trim());
+  const args = [
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-nostdin",
+    "-y",
+    "-i",
+    sourcePath,
+    "-map",
+    "0",
+    "-c",
+    "copy",
+  ];
+  for (const [key, value] of tags) {
+    args.push("-metadata", `${key}=${String(value).trim()}`);
+  }
+  args.push(taggedPath);
+  try {
+    await execFileAsync("ffmpeg", args, { timeout: 120000 });
+    await fs.rename(taggedPath, sourcePath);
+    return sourcePath;
+  } catch (error) {
+    await fs.rm(taggedPath, { force: true }).catch(() => {});
+    const detail = String(error?.stderr || error?.message || error).trim().slice(-500);
+    throw new Error(`Failed to write audio metadata: ${detail}`);
+  }
+}
+
+export async function repairYtdlpMetadata(jobs = []) {
+  const result = { scanned: 0, repaired: 0, failed: 0 };
+  const seen = new Set();
+  for (const job of jobs) {
+    if (
+      job?.status !== "done" ||
+      job?.downloadClient !== "ytdlp" ||
+      path.extname(job?.finalPath || "").toLowerCase() !== ".m4a"
+    ) {
+      continue;
+    }
+    const filePath = path.resolve(job.finalPath);
+    if (seen.has(filePath)) continue;
+    seen.add(filePath);
+    result.scanned += 1;
+    try {
+      const { common } = await parseFile(filePath, { skipCovers: true });
+      const expected = [
+        [common.title, job.trackName],
+        [common.artist, job.artistName],
+        [common.albumartist, job.artistName],
+        [common.album, job.albumName],
+      ].filter(([, value]) => String(value || "").trim());
+      if (
+        expected.every(
+          ([actual, value]) => String(actual || "").trim() === String(value).trim(),
+        )
+      ) {
+        continue;
+      }
+      await writeAudioMetadata(filePath, job);
+      result.repaired += 1;
+    } catch {
+      result.failed += 1;
+    }
+  }
+  return result;
 }

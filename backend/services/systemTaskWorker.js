@@ -48,10 +48,12 @@ async function processSystemTask(payload = {}) {
         { migrateLegacyPaths, resolvePlaylistRoot },
         trackerModule,
         { playlistManager },
+        { repairYtdlpMetadata },
       ] = await Promise.all([
         import("./playlistPaths.js"),
         import("./weeklyFlow/weeklyFlowDownloadTracker.js"),
         import("./weeklyFlow/weeklyFlowPlaylistManager.js"),
+        import("./playlistDownloadUtils.js"),
       ]);
       const result = await migrateLegacyPaths(
         resolvePlaylistRoot(),
@@ -60,6 +62,19 @@ async function processSystemTask(payload = {}) {
       if (result.migrated > 0) {
         console.log(
           `[Playlists] Migrated ${result.migrated} legacy track paths to ${resolvePlaylistRoot()}`,
+        );
+      }
+      const metadataRepair = await repairYtdlpMetadata(
+        trackerModule.downloadTracker.getAll(),
+      );
+      if (metadataRepair.repaired > 0) {
+        console.log(
+          `[Playlists] Added metadata to ${metadataRepair.repaired} yt-dlp track(s)`,
+        );
+      }
+      if (metadataRepair.failed > 0) {
+        console.warn(
+          `[Playlists] Could not add metadata to ${metadataRepair.failed} yt-dlp track(s)`,
         );
       }
       playlistManager.updateConfig(false);

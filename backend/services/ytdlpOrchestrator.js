@@ -14,6 +14,7 @@ import {
   commitImportToPlaylistLibrary,
   joinUnderRoot,
   sanitizePathPart,
+  writeAudioMetadata,
 } from "./playlistDownloadUtils.js";
 import {
   getPayloadCandidate,
@@ -193,6 +194,7 @@ async function handleYtdlpFinalize(payload, helpers) {
     return helpers.failOrTryNextSource(payload, job, reason);
   }
 
+  await writeAudioMetadata(filePath, resolvedTrack);
   import("./aurralHistoryService.js")
     .then(({ recordTrackJobMoving }) => recordTrackJobMoving(job))
     .catch((err) => {
