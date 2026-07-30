@@ -4,6 +4,9 @@
   "description": "Aurral artist request manager",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "22.23.x"
+  },
   "workspaces": [
     "backend",
     "frontend"
