@@ -4,9 +4,9 @@ import {
   checkPlexAuth,
   getPlexResources,
   testPlexConnection,
+  testNavidromeConnection,
   syncPlexNow,
 } from "../../../utils/api/endpoints/settings.js";
-import { testNavidromeOnboarding } from "../../../utils/api/endpoints/auth.js";
 import { getConfiguredStatus } from "../utils/integrationStatus";
 
 import { CheckCircle, Folder, Plus, RefreshCw, Trash2, Wrench } from "lucide-react";
@@ -249,7 +249,7 @@ export function SettingsPlaybackSection({
       if (handleSaveSettings) {
         await handleSaveSettings();
       }
-      await testNavidromeOnboarding(navidrome.url, navidrome.username, navidrome.password || "");
+      await testNavidromeConnection(navidrome.url, navidrome.username, navidrome.password || "");
       showSuccess("Navidrome connection OK");
     } catch (err) {
       const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message;

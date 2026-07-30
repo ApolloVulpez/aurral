@@ -15,6 +15,13 @@ export const testPlexConnection = (url, token) =>
     token,
   });
 
+export const testNavidromeConnection = (url, username, password) =>
+  postData("/settings/navidrome/test", {
+    url: url?.replace(/\/+$/, ""),
+    username,
+    password,
+  });
+
 export const syncPlexNow = () => postData("/settings/plex/sync");
 
 export const getAppSettings = () => getData("/settings");

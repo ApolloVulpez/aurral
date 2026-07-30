@@ -14,6 +14,7 @@ import {
   normalizeM3uPathMode,
 } from "../../../services/playlistM3uPaths.js";
 import { logger } from "../../../services/logger.js";
+import { testNavidromeConnection } from "../../shared/navidromeTest.js";
 import { mergePlexIntegration } from "./plexSettings.js";
 
 function mergeIntegrations(existing, input, keys) {
@@ -27,6 +28,8 @@ function mergeIntegrations(existing, input, keys) {
 }
 
 export function registerGeneral(router) {
+  router.post("/navidrome/test", testNavidromeConnection);
+
   router.get("/", noCache, (req, res) => {
     try {
       const settings = dbOps.getSettings();

@@ -3,10 +3,10 @@ import { dbOps, userOps } from "../db/helpers/index.js";
 import { hashPassword } from "../middleware/passwordHash.js";
 import { getDefaultListenHistoryProfile } from "../services/listeningHistory.js";
 import { defaultData } from "../config/constants.js";
-import { validateExternalUrl } from "../middleware/urlValidator.js";
 import { requirePasswordStrength, reconcileLocalNetworkBypassSetting } from "../middleware/auth.js";
 import { validateDownloadFolderPath } from "../services/downloadFolderConfig.js";
 import { logger } from "../services/logger.js";
+import { testNavidromeConnection } from "./shared/navidromeTest.js";
 import {
   testLidarrConnection as lidarrTest,
   fetchQualityProfiles,
@@ -72,32 +72,7 @@ router.get("/lidarr/test", async (req, res) => {
   }
 });
 
-router.post("/navidrome/test", async (req, res) => {
-  try {
-    const { NavidromeClient } = await import("../services/navidrome.js");
-    let url = (req.body?.url || "").trim().replace(/\/+$/, "");
-    const username = (req.body?.username || "").trim();
-    const password = req.body?.password ?? "";
-    if (!url || !username || !password) {
-      return res.status(400).json({
-        error: "URL, username, and password are required",
-      });
-    }
-    const urlValidation = validateExternalUrl(url);
-    if (!urlValidation.valid) {
-      return res.status(400).json({ error: urlValidation.error });
-    }
-    url = urlValidation.url;
-    const client = new NavidromeClient(url, username, password);
-    await client.ping();
-    res.json({ success: true, message: "Connection successful" });
-  } catch (error) {
-    res.status(400).json({
-      error: "Connection failed",
-      message: error.message,
-    });
-  }
-});
+router.post("/navidrome/test", testNavidromeConnection);
 
 async function resolveLidarrProfiles(lidarr) {
   let qualityProfileId =

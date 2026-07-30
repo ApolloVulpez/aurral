@@ -63,13 +63,6 @@ export const testLidarrOnboarding = (url, apiKey) =>
     params: lidarrCredentialParams(url, apiKey, { trimUrl: true }),
   });
 
-export const testNavidromeOnboarding = (url, username, password) =>
-  postData("/onboarding/navidrome/test", {
-    url: url?.replace(/\/+$/, ""),
-    username,
-    password,
-  });
-
 export const getLidarrProfilesOnboarding = (url, apiKey) =>
   getData("/onboarding/lidarr/profiles", {
     params: lidarrCredentialParams(url, apiKey),

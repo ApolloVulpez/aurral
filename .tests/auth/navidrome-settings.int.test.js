@@ -1,0 +1,101 @@
+import assert from "node:assert/strict";
+import http from "node:http";
+import test from "node:test";
+
+import bcrypt from "bcrypt";
+
+import {
+  cleanupIsolatedState,
+  resetDatabase,
+  setupIsolatedBackend,
+  startServerProcess,
+} from "../helpers/backendTestHarness.js";
+
+const [isolatedState, { db }, { dbOps, userOps }] = await setupIsolatedBackend(
+  "navidrome-settings-api",
+  "backend/config/db-sqlite.js",
+  "backend/db/helpers/index.js",
+);
+
+let aurral;
+let authToken;
+let navidrome;
+let navidromeUrl;
+const navidromeRequests = [];
+
+async function apiFetch(path, options = {}) {
+  const response = await fetch(`http://127.0.0.1:${aurral.port}${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  const text = await response.text();
+  let payload = null;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch {
+    payload = text;
+  }
+  return { response, payload };
+}
+
+test.before(async () => {
+  resetDatabase(db);
+  dbOps.updateSettings({ integrations: {}, onboardingComplete: true });
+  userOps.createUser("admin", bcrypt.hashSync("password123", 4), "admin");
+
+  navidrome = http.createServer((req, res) => {
+    const url = new URL(req.url || "/", "http://127.0.0.1");
+    navidromeRequests.push(url);
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ "subsonic-response": { status: "ok", version: "1.16.1" } }));
+  });
+  await new Promise((resolve) => navidrome.listen(0, "127.0.0.1", resolve));
+  navidromeUrl = `http://127.0.0.1:${navidrome.address().port}`;
+
+  aurral = await startServerProcess();
+  const login = await fetch(`http://127.0.0.1:${aurral.port}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "admin", password: "password123" }),
+  });
+  authToken = (await login.json()).token;
+  assert.equal(login.status, 200);
+});
+
+test.after(async () => {
+  await aurral?.stop();
+  await new Promise((resolve) => navidrome?.close(resolve));
+  await cleanupIsolatedState(isolatedState);
+});
+
+test("admin can update and test Navidrome after onboarding", async () => {
+  const credentials = {
+    url: navidromeUrl,
+    username: "local-user",
+    password: "local-password",
+  };
+  const saved = await apiFetch("/api/settings", {
+    method: "POST",
+    body: JSON.stringify({ integrations: { navidrome: credentials } }),
+  });
+  assert.equal(saved.response.status, 200, JSON.stringify(saved.payload));
+  assert.equal(saved.payload.integrations.navidrome.url, navidromeUrl);
+  assert.equal(saved.payload.integrations.navidrome.username, "local-user");
+
+  const tested = await apiFetch("/api/settings/navidrome/test", {
+    method: "POST",
+    body: JSON.stringify(credentials),
+  });
+  assert.equal(tested.response.status, 200, JSON.stringify(tested.payload));
+  assert.deepEqual(tested.payload, {
+    success: true,
+    message: "Connection successful",
+  });
+  assert.equal(navidromeRequests.length, 1);
+  assert.equal(navidromeRequests[0].pathname, "/rest/ping");
+  assert.equal(navidromeRequests[0].searchParams.get("u"), "local-user");
+});
