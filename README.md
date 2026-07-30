@@ -16,9 +16,6 @@
 Aurral is the Lidarr companion for self-hosted music discovery. Best-in-class recommendations, rotating flows, and playlist downloads, built on Lidarr instead of replacing it. Expand the stack you already trust.
 
 > [!NOTE]
-> **[Aurral v2 is here.](V2.md)** Spotify import, yt-dlp and Usenet downloads, Plex sync, Gotify/webhook notifications, reverse-proxy auth, per-user discovery, and more.
-
-> [!NOTE]
 > **AI disclosure** - Aurral is built with a hybrid approach to development. The foundation is hand-written code. For feature work, specifications are written by a developer, and any AI-generated code is thoroughly reviewed before being merged.
 
 ## Quick Links
