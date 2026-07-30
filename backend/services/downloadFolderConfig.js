@@ -42,6 +42,10 @@ export function getSuggestedDownloadFolderPath() {
   return resolveDefaultPlaylistDownloadRoot();
 }
 
+export function resolveYtdlpStagingRoot(configuredPath) {
+  return resolvePathValue(configuredPath) || path.join(resolveAurralDataDir(), "_staging");
+}
+
 function isExistingDirectory(targetPath) {
   try {
     return fs.existsSync(targetPath) && fs.statSync(targetPath).isDirectory();
@@ -64,6 +68,10 @@ export function getFilesystemBrowseRoots() {
   const roots = [];
   if (isExistingDirectory("/data")) {
     roots.push(fs.realpathSync("/data"));
+  }
+  const dataDir = resolveAurralDataDir();
+  if (isExistingDirectory(dataDir)) {
+    roots.push(fs.realpathSync(dataDir));
   }
   const envDownloadFolder = resolveEnvDownloadFolder();
   if (envDownloadFolder && isExistingDirectory(envDownloadFolder)) {

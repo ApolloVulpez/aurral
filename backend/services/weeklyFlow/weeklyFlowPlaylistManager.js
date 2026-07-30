@@ -18,6 +18,7 @@ import {
 } from "../playlistPaths.js";
 import { buildM3uContent, collectPlaylistM3uEntries } from "../playlistM3u.js";
 import { scheduleLibraryScan } from "../libraryScanWorker.js";
+import { ytdlpClient } from "../ytdlpClient.js";
 const ARTWORK_FILE_EXTENSIONS = [".webp", ".jpg", ".png"];
 const ARTWORK_SUPPRESS_SUFFIX = ".no-artwork";
 const PLAYLIST_FILE_EXTENSIONS = [".m3u", ".nsp"];
@@ -585,10 +586,9 @@ export class WeeklyFlowPlaylistManager {
     for (const playlistType of targets) {
       const jobs = downloadTracker.getByPlaylistType(playlistType);
       for (const job of jobs) {
-        const stagingDir = path.join(this.weeklyFlowRoot, "_staging", job.id);
-        try {
-          await fs.rm(stagingDir, { recursive: true, force: true });
-        } catch {}
+        if (job.downloadClient === "ytdlp") {
+          await ytdlpClient.cleanupStaging(job.id);
+        }
       }
       const playlistDir = path.join(this.playlistLibraryRoot, playlistType);
       try {

@@ -507,6 +507,21 @@ export function SettingsDownloadClientsSection({
               />
             </SettingsModalField>
           </SettingsModalSection>
+
+          <SettingsModalSection title="Downloads">
+            <SettingsModalField
+              label="Staging path"
+              htmlFor="ytdlp-staging-path"
+              hint="Temporary and reviewable downloads stay here until Aurral imports them into the Downloads Folder."
+            >
+              <DownloadFolderField
+                id="ytdlp-staging-path"
+                value={ytdlp.stagingPath || ""}
+                autoApplySuggestion={false}
+                onChange={(nextPath) => updateIntegration("ytdlp", { stagingPath: nextPath })}
+              />
+            </SettingsModalField>
+          </SettingsModalSection>
         </SettingsIntegrationModal>
       )}
 

@@ -5,9 +5,11 @@ description: YouTube and web-backed downloads for flows and playlists.
 
 yt-dlp is the built-in fallback download source. It searches YouTube for artist and title matches.
 
-yt-dlp extracts audio with ffmpeg. yt-dlp writes the audio to your Downloads Folder.
+yt-dlp extracts audio with ffmpeg. Aurral stages the audio outside your media paths, validates and tags it, and then imports it into your Downloads Folder.
 
-You do not need a separate daemon or an extra volume beyond Aurral's media mount. The Docker image includes `yt-dlp` and `ffmpeg`.
+The default staging path is `/config/_staging`. To use another disk, mount it in the Aurral container and set **Settings > Download Clients > yt-dlp > Staging path**. Keep this path outside every media-server library.
+
+You do not need a separate daemon. The Docker image includes `yt-dlp` and `ffmpeg`.
 
 For a bare-metal installation, install both programs on the host. Make sure that `yt-dlp` is on `PATH`.
 
@@ -15,7 +17,7 @@ For a bare-metal installation, install both programs on the host. Make sure that
 
 1. Open **Settings > Download Clients > yt-dlp**.
 2. Leave **Enable yt-dlp** on (default).
-3. If necessary, set **Source priority**.
+3. If necessary, set **Source priority** or **Staging path**.
 4. Select **Test connection**.
 5. Save the settings.
 

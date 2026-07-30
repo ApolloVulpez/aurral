@@ -8,6 +8,10 @@ import { noCache } from "../../../middleware/cache.js";
 import { validateExternalUrl } from "../../../middleware/urlValidator.js";
 import { websocketService } from "../../../services/websocketService.js";
 import { resolvePlaylistRoot } from "../../../services/playlistPaths.js";
+import {
+  resolveYtdlpStagingRoot,
+  validateDownloadFolderPath,
+} from "../../../services/downloadFolderConfig.js";
 import { normalizePathMappings } from "../../../services/pathMappings.js";
 import {
   normalizeM3uPathMappings,
@@ -65,6 +69,15 @@ export function registerGeneral(router) {
         ...settings,
         downloadFolderPath:
           settings.downloadFolderPath || resolvePlaylistRoot(),
+        integrations: {
+          ...(settings.integrations || {}),
+          ytdlp: {
+            ...(settings.integrations?.ytdlp || {}),
+            stagingPath: resolveYtdlpStagingRoot(
+              settings.integrations?.ytdlp?.stagingPath,
+            ),
+          },
+        },
       });
     } catch (error) {
       logger.error("settings", "Settings GET error:", error);
@@ -247,6 +260,16 @@ export function registerGeneral(router) {
         nextYtdlp.priority = Number.isFinite(priority)
           ? Math.min(1000, Math.max(1, priority))
           : 50;
+        const stagingPath = resolveYtdlpStagingRoot(nextYtdlp.stagingPath);
+        const validation = validateDownloadFolderPath(stagingPath, undefined, {
+          create: true,
+        });
+        if (!validation.valid) {
+          return res.status(400).json({
+            error: `Invalid yt-dlp staging path: ${validation.error}`,
+          });
+        }
+        nextYtdlp.stagingPath = validation.path;
         delete nextYtdlp.binaryPath;
         delete nextYtdlp.audioFormat;
         integrations.ytdlp = nextYtdlp;

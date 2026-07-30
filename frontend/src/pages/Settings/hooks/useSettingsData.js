@@ -91,6 +91,7 @@ const defaultSettings = {
     ytdlp: {
       enabled: true,
       priority: 50,
+      stagingPath: "",
     },
     ticketmaster: {
       apiKey: "",

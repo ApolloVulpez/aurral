@@ -3,7 +3,7 @@ import fs from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
 import { dbOps } from "../db/helpers/index.js";
-import { resolvePlaylistRoot } from "./playlistPaths.js";
+import { resolveYtdlpStagingRoot } from "./downloadFolderConfig.js";
 
 const DEFAULT_BINARY = "yt-dlp";
 const SEARCH_LIMIT = 5;
@@ -141,7 +141,11 @@ export async function search(query, { limit = SEARCH_LIMIT } = {}) {
 }
 
 function resolveStagingDir(jobId) {
-  return path.join(resolvePlaylistRoot(), ".ytdlp-staging", String(jobId || "unknown"));
+  return path.join(
+    resolveYtdlpStagingRoot(getSettings().stagingPath),
+    "ytdlp",
+    String(jobId || "unknown"),
+  );
 }
 
 async function findDownloadedAudio(dir) {

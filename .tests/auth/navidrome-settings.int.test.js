@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import http from "node:http";
+import path from "node:path";
 import test from "node:test";
 
 import bcrypt from "bcrypt";
@@ -98,4 +99,21 @@ test("admin can update and test Navidrome after onboarding", async () => {
   assert.equal(navidromeRequests.length, 1);
   assert.equal(navidromeRequests[0].pathname, "/rest/ping");
   assert.equal(navidromeRequests[0].searchParams.get("u"), "local-user");
+});
+
+test("admin can configure persistent yt-dlp staging outside the download folder", async () => {
+  const current = await apiFetch("/api/settings");
+  assert.equal(current.response.status, 200, JSON.stringify(current.payload));
+  assert.equal(
+    current.payload.integrations.ytdlp.stagingPath,
+    path.join(isolatedState.dataDir, "_staging"),
+  );
+
+  const stagingPath = path.join(isolatedState.baseDir, "mounted-staging");
+  const saved = await apiFetch("/api/settings", {
+    method: "POST",
+    body: JSON.stringify({ integrations: { ytdlp: { stagingPath } } }),
+  });
+  assert.equal(saved.response.status, 200, JSON.stringify(saved.payload));
+  assert.equal(saved.payload.integrations.ytdlp.stagingPath, stagingPath);
 });

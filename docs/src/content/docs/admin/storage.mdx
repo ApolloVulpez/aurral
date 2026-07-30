@@ -11,9 +11,9 @@ For mounts, follow [Match Lidarr](/getting-started/storage/). Use the Lidarr med
 
 | Path                             | Contains                                                                                                                                                                   |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/config`                        | Database, settings, users, sessions, cache state, and playlist jobs. Mount it with `./config:/config`. Do not share it with other apps.                                    |
+| `/config`                        | Database, settings, users, sessions, cache state, playlist jobs, and the default yt-dlp staging directory. Mount it with `./config:/config`. Do not share it with other apps. |
 | `/data` (or Lidarr's media root) | Shared library and downloads. Same mount Lidarr uses.                                                                                                                      |
-| Downloads Folder                 | Generated flows, imported playlists, staging, and playlist files. Set in **Settings > Download Clients > Downloads Folder > Path** (for example `/data/downloads/aurral`). |
+| Downloads Folder                 | Generated flows, imported playlists, and playlist files. Set in **Settings > Download Clients > Downloads Folder > Path** (for example `/data/downloads/aurral`).          |
 
 :::note
 `/config` replaces the older `/app/backend/data` path from Aurral v1. At startup, Aurral automatically detects existing databases in either location.
@@ -24,6 +24,8 @@ For mounts, follow [Match Lidarr](/getting-started/storage/). Use the Lidarr med
 - Back up the mounted `/config` folder.
 - Back up the Downloads Folder if you want to keep generated playlists after a rebuild.
 - Back up the Compose file and `.env` file.
+
+yt-dlp stages downloads in `/config/_staging` by default. You can mount another persistent path and select it under **Settings > Download Clients > yt-dlp > Staging path**. Keep it outside media-server libraries to avoid scanner activity while files are incomplete.
 
 ## Library safety
 

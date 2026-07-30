@@ -81,6 +81,7 @@ export const defaultData = {
       ytdlp: {
         enabled: true,
         priority: 50,
+        stagingPath: "",
       },
       ticketmaster: {
         apiKey: "",

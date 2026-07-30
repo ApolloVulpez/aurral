@@ -137,6 +137,7 @@ export const normalizeSettings = (savedSettings) => {
       ytdlp: {
         enabled: true,
         priority: 50,
+        stagingPath: "",
         ...(savedSettings.integrations?.ytdlp || {}),
       },
       ticketmaster: {

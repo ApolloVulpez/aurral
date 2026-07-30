@@ -49,6 +49,25 @@ test("default download folder stays inside the writable Aurral data directory", 
   }
 });
 
+test("yt-dlp staging defaults outside the download folder and honors an override", async () => {
+  const previousDataDir = process.env.AURRAL_DATA_DIR;
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "aurral-staging-default-"));
+  const override = path.join(dataDir, "mounted-staging");
+  process.env.AURRAL_DATA_DIR = dataDir;
+
+  try {
+    const { resolveYtdlpStagingRoot } = await import(
+      "../../backend/services/downloadFolderConfig.js"
+    );
+    assert.equal(resolveYtdlpStagingRoot(), path.join(dataDir, "_staging"));
+    assert.equal(resolveYtdlpStagingRoot(override), override);
+  } finally {
+    if (previousDataDir === undefined) delete process.env.AURRAL_DATA_DIR;
+    else process.env.AURRAL_DATA_DIR = previousDataDir;
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
 test("resolvePlaylistRoot prefers stored download folder path", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aurral-download-db-"));
   const previous = process.env.DOWNLOAD_FOLDER;
