@@ -8,12 +8,8 @@
       name="description"
       content="Aurral is the Lidarr companion for self-hosted music discovery."
     />
-    <meta name="theme-color" content="#121212" />
-    <link
-      rel="icon"
-      type="image/svg+xml"
-      href="favicon.svg"
-    />
+    <meta name="theme-color" content="#000000" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <style>
       :root {
         color-scheme: dark;
@@ -25,7 +21,7 @@
       }
 
       body {
-        background: #121212;
+        background: #0a0c0c;
         color: #8e9489;
         margin: 0;
       }
@@ -43,7 +39,7 @@
         border: 1px solid #394036;
         border-radius: 0.55rem;
         overflow: hidden;
-        width: min(70rem, 100%);
+        width: min(60rem, 100%);
       }
 
       .terminal-bar {
@@ -99,8 +95,13 @@
 
       pre {
         flex: 0 0 auto;
-        font: 600 clamp(3.5px, 0.9vw, 12px) / 0.88 ui-monospace, SFMono-Regular, Menlo, Monaco,
-          Consolas, monospace;
+        font:
+          600 clamp(3.5px, 0.9vw, 12px) / 0.88 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          Monaco,
+          Consolas,
+          monospace;
         grid-area: 1 / 1;
         margin: 0;
         user-select: none;
@@ -179,24 +180,17 @@
     <main>
       <section class="terminal" aria-label="Aurral terminal">
         <header class="terminal-bar">
-          <span class="terminal-controls" aria-hidden="true">
-            <b>[x]</b><b>[-]</b><b>[+]</b>
-          </span>
+          <span class="terminal-controls" aria-hidden="true"> <b>[x]</b><b>[-]</b><b>[+]</b> </span>
           <span class="terminal-title">♫ aurral</span>
         </header>
 
-        <div
-          class="stage"
-          role="img"
-          aria-label="A rotating Aurral logo rendered as ASCII art"
-        >
+        <div class="stage" role="img" aria-label="A rotating Aurral logo rendered as ASCII art">
           <div class="ascii-stack" aria-hidden="true">
             <pre class="ascii-base" data-ascii-base></pre>
             <pre class="ascii-highlight" data-ascii-highlight></pre>
           </div>
           <noscript>Aurral</noscript>
         </div>
-
       </section>
 
       <p class="tagline">The Lidarr companion for music discovery.</p>
