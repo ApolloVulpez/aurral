@@ -15,9 +15,6 @@
 
 Aurral is the Lidarr companion for self-hosted music discovery. Best-in-class recommendations, rotating flows, and playlist downloads, built on Lidarr instead of replacing it. Expand the stack you already trust.
 
-> [!NOTE]
-> **AI disclosure** - Aurral is built with a hybrid approach to development. The foundation is hand-written code. For feature work, specifications are written by a developer, and any AI-generated code is thoroughly reviewed before being merged.
-
 ## Quick Links
 
 - [Website](https://aurral.org)
@@ -79,6 +76,9 @@ For a stack with Lidarr, slskd, and Navidrome, see [`docker-compose.example.yml`
 ## Documentation
 
 Full setup and usage guides live at [docs.aurral.org](https://docs.aurral.org/).
+
+> [!NOTE]
+> **AI disclosure** - Aurral is built with a hybrid approach to development. The foundation is hand-written code. For feature work, specifications are written by a developer, and any AI-generated code is thoroughly reviewed before being merged.
 
 ## Support
 
