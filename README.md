@@ -13,7 +13,7 @@
 ![Discord](https://img.shields.io/discord/1457052417580339285?style=flat)
 [![Sponsor](https://img.shields.io/github/sponsors/lklynet?label=Sponsor&logo=GitHub-Sponsors&logoColor=fe8a76)](https://github.com/sponsors/lklynet/)
 
-Aurral is the Lidarr companion for self-hosted music discovery. Best-in-class recommendations, rotating flows, and playlist downloads, built on Lidarr instead of replacing it. Expand the stack you already trust.
+Aurral is the Lidarr companion for self-hosted music discovery. Best-in-class recommendations, rotating flows, and playlist downloads, built on Lidarr instead of replacing it.
 
 ## Quick Links
 
@@ -26,7 +26,7 @@ Aurral is the Lidarr companion for self-hosted music discovery. Best-in-class re
 - **Discover**: Best-in-class personalized recommendations, trends, tags, recent releases, discover playlists, and nearby shows.
 - **Search**: Find artists and albums, preview tracks, and add to Lidarr with your defaults.
 - **Library**: Browse and search artists already in Lidarr.
-- **Playlists**: Run scheduled flows, adopt discover playlists like Release Radar, import static playlists, and convert flows to fixed tracklists.
+- **Playlists**: Run scheduled flows, adopt discover playlists like Release Radar, import spotify playlists, and convert flows to fixed tracklists.
 - **Activity**: Queue, review, and history for Lidarr requests, yt-dlp / slskd / Usenet downloads, and Aurral playlist jobs.
 - **Integrations**: Lidarr, Last.fm, ListenBrainz, Koito, yt-dlp, slskd, SABnzbd/NZBGet, Navidrome, Plex, Ticketmaster, Gotify, and webhooks.
 - **Playback**: Stream through Navidrome (M3U playlists) or Plex/Plexamp (API-synced playlists) from a dedicated download folder.
@@ -88,7 +88,6 @@ Aurral builds on open metadata, listening data, and infrastructure from the proj
 | ------------------------------------------------------------------ | ---------------------------------------------------------- |
 | [BrainzMash](https://github.com/statichum/brainzmash-hearring-aid) | Hosted artist and album metadata for discovery and search  |
 | [Honker](https://github.com/russellromney/honker)                  | Durable SQLite queues and background workers across Aurral |
-| [Last.fm](https://www.last.fm)                                     | Listening history, tags, and personalized recommendations  |
 | [MusicBrainz](https://musicbrainz.org)                             | Canonical release metadata and artist identifiers          |
 
 - Community: [Discord](https://discord.gg/cpPYfgVURJ)
