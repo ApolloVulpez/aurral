@@ -17,11 +17,10 @@ Aurral is the Lidarr companion for self-hosted music discovery. Best-in-class re
 
 ## Quick Links
 
-<div align="center" width="100%">
-| Website                          | Docs                                        | Discord                                     |
-| -------------------------------- | ------------------------------------------- | ------------------------------------------- |
-| [aurral.org](https://aurral.org) | [docs.aurral.org](https://docs.aurral.org/) | [discord.gg](https://discord.gg/cpPYfgVURJ) |
-</div>
+- [Website](https://aurral.org)
+- [Documentation](https://docs.aurral.org/)
+- [Discord](https://discord.gg/cpPYfgVURJ)
+
 ## Features
 
 - **Discover**: Best-in-class personalized recommendations, trends, tags, recent releases, discover playlists, and nearby shows.
