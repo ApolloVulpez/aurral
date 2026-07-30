@@ -1,0 +1,105 @@
+---
+title: API overview
+description: This page explains Aurral authentication and HTTP API use for scripts, widgets, and integrations.
+---
+
+Aurral provides a JSON HTTP API. The web interface uses this API. You can also
+use the API for scripts, dashboards, and homepage widgets.
+
+:::caution
+The API does not have version numbers. Routes and response formats can change
+between Aurral releases. Use the same Aurral version for each integration. If
+response fields change or are not present, make sure that your integration can
+operate.
+:::
+
+## Authentication
+
+Open **Settings > System**. Copy the API key. Send the key in the `X-Api-Key`
+header:
+
+```bash
+curl --fail \
+  --header "X-Api-Key: YOUR_API_KEY" \
+  https://aurral.example.com/api/library/artists
+```
+
+Aurral also accepts the `api_key` query parameter:
+
+```bash
+curl --fail \
+  "https://aurral.example.com/api/library/recent?api_key=YOUR_API_KEY"
+```
+
+Use the header. A browser can save URLs in its history. A reverse proxy can
+save URLs in its access logs.
+
+The API key replaces a login session token. You do not need to call the login
+endpoint first. The key currently gives administrator access. It does **not**
+have read-only access.
+
+Keep the key in a secret store. If your integration needs read access, make
+only `GET` requests. After you rotate the key, the old key does not operate.
+
+Do not put the key in public browser JavaScript. A server-side widget or
+same-origin proxy keeps it out of visitors' browsers.
+
+## Useful read endpoints
+
+| Endpoint | Purpose | Parameters |
+| --- | --- | --- |
+| `GET /api/health/live` | Minimal liveness check | None |
+| `GET /api/health` | Aurral, library, discovery, and system status | None |
+| `GET /api/library/artists` | Library artists | `limit` (1-10000), `offset` |
+| `GET /api/library/artists/:mbid` | One library artist | MusicBrainz artist ID in the path |
+| `GET /api/library/albums` | Albums for an artist | Required `artistId` |
+| `GET /api/library/albums/:id` | One library album | Lidarr album ID in the path |
+| `GET /api/library/tracks` | Tracks for an album | `albumId` or `releaseGroupMbid` |
+| `GET /api/library/recent` | 20 most recently added artists | None |
+| `GET /api/library/recent-releases` | Recent missing releases | None |
+| `GET /api/requests` | Current artist and album requests | Optional `refresh=true` |
+| `GET /api/library/downloads/status/all` | All current download states | None |
+| `GET /api/search` | Search artists, albums, or tags | Required `q`. Optional `scope`, `limit`, and `offset` |
+
+See the [endpoint reference](/api/endpoints/) for the complete current route
+index.
+
+## Example homepage request
+
+This request gets five recently added artists. The key stays on the server:
+
+```js
+const response = await fetch(`${process.env.AURRAL_URL}/api/library/artists?limit=5`, {
+  headers: { "X-Api-Key": process.env.AURRAL_API_KEY },
+});
+
+if (!response.ok) throw new Error(`Aurral returned ${response.status}`);
+const artists = await response.json();
+```
+
+## Cross-origin requests
+
+If a browser loads Aurral from another origin, set `CORS_ORIGIN`. Use commas to
+separate each permitted origin. By default, Aurral does not permit cross-origin
+requests.
+
+The current CORS preflight allows the `Content-Type` and `Authorization`
+headers. It does not allow the `X-Api-Key` header. For a cross-origin browser
+widget, use a server-side proxy. When you use the `api_key` query parameter, you
+do not need a custom header. However, browser history and access logs can reveal
+the key.
+
+## Responses and limits
+
+- For a successful request, the route returns a JSON object or array.
+- For an error, the route returns JSON with an `error` field. Some errors also
+  have a `message` or `code` field.
+- If authentication is invalid or not present, Aurral returns `401`.
+- If a valid account does not have the necessary permission, Aurral returns
+  `403`.
+- Aurral limits each client to 5,000 API requests in each 15-minute period.
+- The API key does not have a separate permission or read-only scope.
+
+The API key gives access to administration routes and routes that change data.
+Before you give the key to a third-party integration, read the endpoint
+reference.

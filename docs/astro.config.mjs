@@ -84,6 +84,14 @@ export default defineConfig({
             { slug: "admin/troubleshooting" },
           ],
         },
+        {
+          label: "API",
+          collapsed: true,
+          items: [
+            { slug: "api/overview" },
+            { slug: "api/endpoints" },
+          ],
+        },
         { label: "Sponsorship", slug: "sponsorship" },
       ],
     }),
