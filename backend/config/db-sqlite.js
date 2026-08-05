@@ -132,6 +132,15 @@ db.exec(`
     updated_at INTEGER
   );
 
+  CREATE TABLE IF NOT EXISTS lidarr_artist_id_map (
+    musicbrainz_id TEXT PRIMARY KEY,
+    lidarr_foreign_artist_id TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_lidarr_artist_id_map_foreign_id
+    ON lidarr_artist_id_map (lidarr_foreign_artist_id);
+
   CREATE TABLE IF NOT EXISTS aurral_history (
     id TEXT PRIMARY KEY,
     kind TEXT NOT NULL,
@@ -198,6 +207,43 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_honker_task_runs_started_at ON honker_task_runs(started_at DESC);
   CREATE INDEX IF NOT EXISTS idx_honker_task_runs_queue_started ON honker_task_runs(queue, started_at DESC);
   CREATE INDEX IF NOT EXISTS idx_honker_task_runs_job ON honker_task_runs(job_id, queue);
+`);
+
+const duplicateLidarrArtistIds = db
+  .prepare(
+    `SELECT lidarr_foreign_artist_id
+     FROM lidarr_artist_id_map
+     GROUP BY lidarr_foreign_artist_id
+     HAVING COUNT(*) > 1`,
+  )
+  .all();
+
+if (duplicateLidarrArtistIds.length > 0) {
+  const deleteDuplicateLidarrArtistId = db.prepare(
+    `DELETE FROM lidarr_artist_id_map
+     WHERE lidarr_foreign_artist_id = ?
+       AND musicbrainz_id NOT IN (
+         SELECT musicbrainz_id
+         FROM lidarr_artist_id_map
+         WHERE lidarr_foreign_artist_id = ?
+         ORDER BY updated_at DESC, musicbrainz_id ASC
+         LIMIT 1
+       )`,
+  );
+  db.transaction((duplicates) => {
+    for (const duplicate of duplicates) {
+      deleteDuplicateLidarrArtistId.run(
+        duplicate.lidarr_foreign_artist_id,
+        duplicate.lidarr_foreign_artist_id,
+      );
+    }
+  })(duplicateLidarrArtistIds);
+}
+
+db.exec(`
+  DROP INDEX IF EXISTS idx_lidarr_artist_id_map_foreign_id;
+  CREATE UNIQUE INDEX idx_lidarr_artist_id_map_foreign_id
+    ON lidarr_artist_id_map (lidarr_foreign_artist_id);
 `);
 
 const tableColumns = db

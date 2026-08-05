@@ -17,12 +17,14 @@ test("resolveEnvDownloadFolder prefers DOWNLOAD_FOLDER", async () => {
   else process.env.DOWNLOAD_FOLDER = previous;
 });
 
-test("default download folder stays inside the writable Aurral data directory", async () => {
+test("default download folder follows the available writable data root", async () => {
   const previousDataDir = process.env.AURRAL_DATA_DIR;
   const previousDownloadFolder = process.env.DOWNLOAD_FOLDER;
   const previousPlaylistFolder = process.env.PLAYLIST_FOLDER;
   const previousWeeklyFlowFolder = process.env.WEEKLY_FLOW_FOLDER;
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aurral-download-default-"));
+  const nonDirectoryPath = path.join(tempDir, "not-a-directory");
+  fs.writeFileSync(nonDirectoryPath, "test");
   process.env.AURRAL_DATA_DIR = tempDir;
   delete process.env.DOWNLOAD_FOLDER;
   delete process.env.PLAYLIST_FOLDER;
@@ -33,7 +35,11 @@ test("default download folder stays inside the writable Aurral data directory", 
       "../../backend/services/downloadFolderConfig.js"
     );
     assert.equal(
-      resolveDefaultPlaylistDownloadRoot(),
+      resolveDefaultPlaylistDownloadRoot({ dataRoot: tempDir }),
+      path.join(tempDir, "downloads", "aurral"),
+    );
+    assert.equal(
+      resolveDefaultPlaylistDownloadRoot({ dataRoot: nonDirectoryPath }),
       path.join(tempDir, "downloads", "aurral"),
     );
   } finally {
