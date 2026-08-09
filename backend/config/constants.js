@@ -91,6 +91,10 @@ export const defaultData = {
         localDiscoveryIncludeRecommendations: true,
         localDiscoveryIncludeTrending: true,
       },
+      news: {
+        enabled: true,
+        feeds: [],
+      },
       lidarr: {
         url: "",
         externalUrl: "",
@@ -143,6 +147,14 @@ export const defaultData = {
     },
     playlistArtwork: {
       style: "photo",
+    },
+    inbox: {
+      enabled: true,
+      releases: true,
+      shows: true,
+      news: true,
+      recommendedNews: false,
+      discoveries: true,
     },
   },
 };

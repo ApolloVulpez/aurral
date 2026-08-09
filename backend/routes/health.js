@@ -4,6 +4,7 @@ import os from "os";
 import path from "path";
 import {
   getLastfmApiKey,
+  getNewsSettings,
   getTicketmasterApiKey,
   getMetadataProviderHealthSnapshot,
 } from "../services/apiClients/index.js";
@@ -273,6 +274,11 @@ function buildBootstrapPayload(req) {
     payload.lidarrConfigured = lidarrConfigured;
     payload.lastfmConfigured = !!getLastfmApiKey();
     payload.ticketmasterConfigured = !!getTicketmasterApiKey();
+    payload.inboxEnabled = settings.inbox?.enabled !== false;
+    const newsSettings = getNewsSettings();
+    payload.newsConfigured = newsSettings.enabled && newsSettings.feeds.some(
+      (feed) => feed.enabled && (feed.group === "custom" || newsSettings.groups[feed.group] !== false),
+    );
     payload.musicbrainzConfigured = !!settings.integrations?.metadata?.baseUrl;
     payload.metadataConfigured = !!settings.integrations?.metadata?.baseUrl;
     payload.slskdConfigured = downloadSources.slskd.configured;

@@ -99,6 +99,25 @@ const defaultSettings = {
       localDiscoveryIncludeRecommendations: true,
       localDiscoveryIncludeTrending: true,
     },
+    news: {
+      enabled: true,
+      feeds: [],
+      groups: {
+        major: true,
+        indie: true,
+        discovery: true,
+        hiphop: true,
+        pop: true,
+        electronic: true,
+        metal: true,
+        country: true,
+        jazz: true,
+        classical: true,
+        specialty: true,
+        regional: true,
+        concerts: true,
+      },
+    },
     lidarr: {
       url: "",
       externalUrl: "",
@@ -134,6 +153,14 @@ const defaultSettings = {
   },
   playlistArtwork: {
     style: "photo",
+  },
+  inbox: {
+    enabled: true,
+    releases: true,
+    shows: true,
+    news: true,
+    recommendedNews: false,
+    discoveries: true,
   },
   security: {
     localNetworkBypass: {
@@ -174,6 +201,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
   const saveInFlightRef = useRef(null);
   const saveQueuedRef = useRef(false);
   const persistSettingsRef = useRef(null);
+  const settingsActivationTimerRef = useRef(null);
   const mountedRef = useRef(true);
 
   const applyHealthUpdate = useCallback((healthData, { allowClearRefreshing = true } = {}) => {
@@ -239,6 +267,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
 
   const fetchSettings = useCallback(async () => {
     comparisonEnabledRef.current = false;
+    if (settingsActivationTimerRef.current) clearTimeout(settingsActivationTimerRef.current);
     try {
       const [, savedSettings] = await Promise.all([refreshHealth(), getAppSettings()]);
       const updatedSettings = normalizeSettings(savedSettings);
@@ -249,8 +278,14 @@ export function useSettingsData(showSuccess, showError, showInfo) {
       setOriginalSettings(savedSnapshot);
       hasUnsavedChangesRef.current = false;
       setHasUnsavedChanges(false);
-      setTimeout(() => {
+      settingsActivationTimerRef.current = setTimeout(() => {
+        settingsActivationTimerRef.current = null;
+        if (!mountedRef.current) return;
         comparisonEnabledRef.current = true;
+        const changed = checkForChanges(settingsRef.current, originalSettingsRef.current);
+        hasUnsavedChangesRef.current = changed;
+        setHasUnsavedChanges(changed);
+        if (changed) persistSettingsRef.current?.(settingsRef.current);
       }, 600);
 
       const lidarr = updatedSettings.integrations?.lidarr || {};
@@ -291,6 +326,10 @@ export function useSettingsData(showSuccess, showError, showInfo) {
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
+      }
+      if (settingsActivationTimerRef.current) {
+        clearTimeout(settingsActivationTimerRef.current);
+        settingsActivationTimerRef.current = null;
       }
       if (hasUnsavedChangesRef.current) {
         persistSettingsRef.current?.(settingsRef.current);
@@ -364,6 +403,11 @@ export function useSettingsData(showSuccess, showError, showInfo) {
             hasUnsavedChangesRef.current = stillDirty;
             if (mountedRef.current) setHasUnsavedChanges(stillDirty);
           }
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("aurral:settings-updated", {
+              detail: { inboxEnabled: normalizedSettings.inbox?.enabled !== false },
+            }));
+          }
 
           if (mountedRef.current) await refreshHealth();
           succeeded = true;
@@ -409,7 +453,6 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     const changed = checkForChanges(newSettings, originalSettingsRef.current);
     hasUnsavedChangesRef.current = changed;
     setHasUnsavedChanges(changed);
-
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;

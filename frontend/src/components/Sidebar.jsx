@@ -1,6 +1,16 @@
 import { Link, useLocation } from "react-router-dom";
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { ArrowLeft, Ban, Library, Sparkles, Activity, AudioWaveform, Ticket, Settings } from "lucide-react";
+import {
+  ArrowLeft,
+  Activity,
+  AudioWaveform,
+  Ban,
+  Library,
+  Newspaper,
+  Settings,
+  Sparkles,
+  Ticket,
+} from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useFlowWorkerActivity } from "../pages/flows/useFlowWorkerActivity";
 import { DEFAULT_SETTINGS_TAB, SETTINGS_NAV_TABS } from "../pages/Settings/settingsTabsConfig";
@@ -36,6 +46,7 @@ function Sidebar({ mode, width = 208, settingsMode = false }) {
     typeof window !== "undefined" ? window.matchMedia("(min-width: 768px)").matches : true,
   );
   const [ticketmasterConfigured, setTicketmasterConfigured] = useState(true);
+  const [newsConfigured, setNewsConfigured] = useState(true);
   const {
     recentPages: discoverRecentPages,
     clearRecentPages,
@@ -48,6 +59,7 @@ function Sidebar({ mode, width = 208, settingsMode = false }) {
     getDiscoverArtistPath(currentDiscoverPath) || currentDiscoverPath;
   const isOnSettings = location.pathname.startsWith("/settings");
   const isOnShows = location.pathname.startsWith("/shows");
+  const isOnNews = location.pathname.startsWith("/discover/news");
   const isOnActivity =
     location.pathname.startsWith("/activity") || location.pathname.startsWith("/history");
 
@@ -104,6 +116,7 @@ function Sidebar({ mode, width = 208, settingsMode = false }) {
   useEffect(() => {
     if (bootstrap) {
       setTicketmasterConfigured(!!bootstrap.ticketmasterConfigured);
+      setNewsConfigured(!!bootstrap.newsConfigured);
     }
   }, [bootstrap]);
 
@@ -113,11 +126,12 @@ function Sidebar({ mode, width = 208, settingsMode = false }) {
         return isDiscoverSectionActive;
       }
       if (item.section === "shows") return isOnShows;
+      if (item.section === "news") return isOnNews;
       if (item.section === "activity") return isOnActivity;
       if (item.path === "/discover" && location.pathname === "/") return true;
       return location.pathname === item.path;
     },
-    [isDiscoverSectionActive, isOnActivity, isOnShows, location.pathname],
+    [isDiscoverSectionActive, isOnActivity, isOnNews, isOnShows, location.pathname],
   );
 
   const navItems = useMemo(() => {
@@ -142,6 +156,16 @@ function Sidebar({ mode, width = 208, settingsMode = false }) {
             },
           ]
         : []),
+      ...(newsConfigured
+        ? [
+            {
+              path: "/discover/news",
+              label: "News",
+              icon: Newspaper,
+              section: "news",
+            },
+          ]
+        : []),
       {
         path: "/playlists",
         label: "Playlists",
@@ -162,7 +186,7 @@ function Sidebar({ mode, width = 208, settingsMode = false }) {
       (item) =>
         !item.permission || user?.role === "admin" || !!user?.permissions?.[item.permission],
     );
-  }, [discoverRecentPages, ticketmasterConfigured, user]);
+  }, [discoverRecentPages, newsConfigured, ticketmasterConfigured, user]);
 
   const translateClass = mode === "hidden" ? "-translate-x-full" : "translate-x-0";
 

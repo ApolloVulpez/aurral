@@ -15,6 +15,7 @@ export const normalizeSettings = (savedSettings) => {
   const lastfm = savedSettings.integrations?.lastfm || {};
   const legacyMusicbrainz = savedSettings.integrations?.musicbrainz || {};
   const metadata = savedSettings.integrations?.metadata || {};
+  const news = savedSettings.integrations?.news || {};
   const parsedAutoRefreshHours = parseInt(lastfm.discoveryAutoRefreshHours, 10);
   const normalizedAutoRefreshHours = [24, 168, 720].includes(parsedAutoRefreshHours)
     ? parsedAutoRefreshHours
@@ -39,6 +40,14 @@ export const normalizeSettings = (savedSettings) => {
     playlistArtwork: {
       ...playlistArtwork,
       style: playlistArtworkStyle,
+    },
+    inbox: {
+      enabled: savedSettings.inbox?.enabled !== false,
+      releases: savedSettings.inbox?.releases !== false,
+      shows: savedSettings.inbox?.shows !== false,
+      news: savedSettings.inbox?.news !== false,
+      recommendedNews: savedSettings.inbox?.recommendedNews === true,
+      discoveries: savedSettings.inbox?.discoveries !== false,
     },
     releaseTypes: savedSettings.releaseTypes || allReleaseTypes,
     quality: savedSettings.quality || "standard",
@@ -93,6 +102,25 @@ export const normalizeSettings = (savedSettings) => {
             ? lastfm.discoveryMode
             : "balanced",
         ...lastfm,
+      },
+      news: {
+        enabled: news.enabled !== false,
+        feeds: Array.isArray(news.feeds) ? news.feeds : [],
+        groups: {
+          major: news.groups?.major !== false,
+          indie: news.groups?.indie !== false,
+          discovery: news.groups?.discovery !== false,
+          hiphop: news.groups?.hiphop !== false,
+          pop: news.groups?.pop !== false,
+          electronic: news.groups?.electronic !== false,
+          metal: news.groups?.metal !== false,
+          country: news.groups?.country !== false,
+          jazz: news.groups?.jazz !== false,
+          classical: news.groups?.classical !== false,
+          specialty: news.groups?.specialty !== false,
+          regional: news.groups?.regional !== false,
+          concerts: news.groups?.concerts !== false,
+        },
       },
       slskd: {
         enabled: false,

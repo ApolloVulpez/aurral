@@ -20,6 +20,7 @@ import {
 import { logger } from "../../../services/logger.js";
 import { testNavidromeConnection } from "../../shared/navidromeTest.js";
 import { mergePlexIntegration } from "./plexSettings.js";
+import { getNewsSettings, normalizeNewsFeeds, normalizeNewsGroups } from "../../../services/apiClients/config.js";
 
 function mergeIntegrations(existing, input, keys) {
   const merged = { ...existing, ...input };
@@ -44,6 +45,7 @@ export function registerGeneral(router) {
       if (settings?.integrations?.musicbrainz) {
         delete settings.integrations.musicbrainz;
       }
+      settings.integrations.news = getNewsSettings();
       if (!settings?.integrations?.metadata) {
         settings.integrations.metadata = {
           provider: "brainzmash",
@@ -98,6 +100,7 @@ export function registerGeneral(router) {
         pathMappings,
         security,
         playlistArtwork,
+        inbox,
       } = req.body;
 
       const currentSettings = dbOps.getSettings();
@@ -282,8 +285,18 @@ export function registerGeneral(router) {
           integrations.navidrome.pathMappings,
         );
       }
+      if (integrations?.news) {
+        const nextNews = {
+          ...(currentSettings.integrations?.news || {}),
+          ...integrations.news,
+        };
+        nextNews.enabled = nextNews.enabled !== false;
+        nextNews.feeds = normalizeNewsFeeds(nextNews.feeds);
+        nextNews.groups = normalizeNewsGroups(nextNews.groups);
+        integrations.news = nextNews;
+      }
 
-      const INTEGRATION_KEYS = ["lidarr", "navidrome", "slskd", "prowlarr", "nzbget", "ytdlp", "lastfm", "ticketmaster", "metadata", "general", "gotify", "webhookEvents"];
+      const INTEGRATION_KEYS = ["lidarr", "navidrome", "slskd", "prowlarr", "nzbget", "ytdlp", "lastfm", "ticketmaster", "news", "metadata", "general", "gotify", "webhookEvents"];
       let mergedIntegrations =
         currentSettings.integrations || defaultData.settings.integrations || {};
       if (integrations) {
@@ -312,7 +325,6 @@ export function registerGeneral(router) {
       if (mergedIntegrations?.coverArtArchive) {
         delete mergedIntegrations.coverArtArchive;
       }
-
       const updatedSettings = {
         ...currentSettings,
         quality:
@@ -334,6 +346,19 @@ export function registerGeneral(router) {
             ? releaseTypes
             : currentSettings.releaseTypes || defaultData.settings.releaseTypes,
         integrations: mergedIntegrations,
+        inbox:
+          inbox !== undefined
+            ? {
+                ...(currentSettings.inbox || defaultData.settings.inbox),
+                ...inbox,
+                enabled: inbox.enabled !== false,
+                releases: inbox.releases !== false,
+                shows: inbox.shows !== false,
+                news: inbox.news !== false,
+                recommendedNews: inbox.recommendedNews === true,
+                discoveries: inbox.discoveries !== false,
+              }
+            : currentSettings.inbox || defaultData.settings.inbox,
         security:
           security !== undefined
             ? {

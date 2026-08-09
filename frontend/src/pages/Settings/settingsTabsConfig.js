@@ -7,7 +7,8 @@ import {
   ListChecks,
   Monitor,
   Music,
-  Radar,
+  Rss,
+  DatabaseSearch,
   Server,
   Users,
 } from "lucide-react";
@@ -17,10 +18,11 @@ export const SETTINGS_TABS = [
   { id: "storage-health", label: "Storage Health", icon: HardDrive },
   { id: "tasks", label: "Tasks", icon: ListChecks },
   { id: "lidarr", label: "Lidarr", icon: Server },
-  { id: "indexers", label: "Indexers", icon: Radar },
+  { id: "indexers", label: "Indexers", icon: DatabaseSearch },
   { id: "download-clients", label: "Download Clients", icon: Download },
   { id: "playback", label: "Playback", icon: Music },
   { id: "connect", label: "Connect", icon: Bell },
+  { id: "rss-news", label: "RSS News", icon: Rss },
   { id: "discover", label: "Discover", icon: Compass },
   { id: "metadata", label: "Metadata", icon: Database, hidden: true },
   { id: "users", label: "Users", icon: Users },
@@ -83,12 +85,20 @@ const SETTINGS_SEARCH_METADATA = {
     },
   },
   connect: {
-    sections: ["Connections", "Webhooks", "Notification Events"],
+    sections: ["Connections", "Webhooks", "Notification Events", "Inbox"],
     services: {
       Gotify: "push notifications mobile alerts",
       "Last.fm": "listening history API",
       Ticketmaster: "local shows events",
+      Inbox: "library updates releases shows news discoveries",
       Webhooks: "notifications HTTP callbacks",
+    },
+  },
+  "rss-news": {
+    sections: ["RSS News", "Feed groups", "RSS feeds"],
+    services: {
+      News: "RSS articles artists library recommendations",
+      Feeds: "music news sources custom feeds",
     },
   },
   discover: {

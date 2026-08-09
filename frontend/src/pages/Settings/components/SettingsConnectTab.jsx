@@ -34,6 +34,7 @@ export function SettingsConnectTab({
   const gotify = settings.integrations?.gotify || {};
   const lastfm = settings.integrations?.lastfm || {};
   const ticketmaster = settings.integrations?.ticketmaster || {};
+  const inbox = settings.inbox || {};
   const gotifyConfigured = Boolean(gotify.url && gotify.token);
   const lastfmConfigured = Boolean(health?.lastfmConfigured);
   const ticketmasterConfigured = Boolean(health?.ticketmasterConfigured);
@@ -86,6 +87,12 @@ export function SettingsConnectTab({
         ...settings.integrations,
         ticketmaster: { ...ticketmaster, ...patch },
       },
+    });
+
+  const updateInbox = (patch) =>
+    updateSettings({
+      ...settings,
+      inbox: { ...inbox, ...patch },
     });
 
   const [dragIdx, setDragIdx] = useState(null);
@@ -415,6 +422,64 @@ export function SettingsConnectTab({
             />
           </SettingsArrFormGroup>
         </SettingsArrFieldSet>
+
+        <SettingsArrFieldSet legend="Inbox">
+          <div className="arr-info">
+            Choose which library-based updates appear in the inbox dropdown.
+          </div>
+          <SettingsArrFormGroup label="Enable Inbox" labelFor="inbox-enabled">
+            <PillToggle
+              id="inbox-enabled"
+              checked={inbox.enabled !== false}
+              aria-label="Enable inbox"
+              onChange={(e) => updateInbox({ enabled: e.target.checked })}
+            />
+          </SettingsArrFormGroup>
+          <div className={`settings-inbox-preferences${inbox.enabled === false ? " is-disabled" : ""}`} aria-disabled={inbox.enabled === false}>
+          <SettingsArrFormGroup label="Upcoming releases" labelFor="inbox-releases">
+            <PillToggle
+              id="inbox-releases"
+              disabled={inbox.enabled === false}
+              checked={inbox.releases !== false}
+              aria-label="Show upcoming releases in inbox"
+              onChange={(e) => updateInbox({ releases: e.target.checked })}
+            />
+          </SettingsArrFormGroup>
+          <SettingsArrFormGroup label="Upcoming shows" labelFor="inbox-shows">
+            <PillToggle
+              id="inbox-shows"
+              checked={inbox.shows !== false}
+              aria-label="Show upcoming shows in inbox"
+              onChange={(e) => updateInbox({ shows: e.target.checked })}
+            />
+          </SettingsArrFormGroup>
+          <SettingsArrFormGroup label="Library Artist news" labelFor="inbox-news">
+            <PillToggle
+              id="inbox-news"
+              checked={inbox.news !== false}
+              aria-label="Show library artist news in inbox"
+              onChange={(e) => updateInbox({ news: e.target.checked })}
+            />
+          </SettingsArrFormGroup>
+          <SettingsArrFormGroup label="Recommended Artist news" labelFor="inbox-recommended-news">
+            <PillToggle
+              id="inbox-recommended-news"
+              checked={inbox.recommendedNews === true}
+              aria-label="Show recommended artist news in inbox"
+              onChange={(e) => updateInbox({ recommendedNews: e.target.checked })}
+            />
+          </SettingsArrFormGroup>
+          <SettingsArrFormGroup label="Discoveries" labelFor="inbox-discoveries">
+            <PillToggle
+              id="inbox-discoveries"
+              disabled={inbox.enabled === false}
+              checked={inbox.discoveries !== false}
+              aria-label="Show discoveries in inbox"
+              onChange={(e) => updateInbox({ discoveries: e.target.checked })}
+            />
+          </SettingsArrFormGroup>
+          </div>
+        </SettingsArrFieldSet>
       </form>
 
       {activeModal === "gotify" && (
@@ -574,6 +639,7 @@ export function SettingsConnectTab({
           </SettingsModalSection>
         </SettingsIntegrationModal>
       )}
+
     </div>
   );
 }

@@ -16,6 +16,7 @@ import Sidebar from "./Sidebar";
 import GlobalSearch from "./GlobalSearch";
 import GlobalPlayerBar from "./GlobalPlayerBar";
 import UserProfileMenu from "./UserProfileMenu";
+import InboxMenu from "./InboxMenu";
 import { useAuth } from "../contexts/AuthContext";
 import { useAudioQueue } from "../contexts/audioQueueContext";
 import { DEFAULT_SETTINGS_TAB } from "../pages/Settings/settingsTabsConfig";
@@ -420,6 +421,7 @@ function Layout({ children, headerActions }) {
           <GlobalSearch settingsMode={isSettingsRoute} />
 
           <div className="app-header-actions">
+            <InboxMenu />
             <UserProfileMenu />
             {headerActions}
           </div>
