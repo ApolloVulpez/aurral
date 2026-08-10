@@ -18,6 +18,22 @@ async function processSystemTask(payload = {}) {
       weeklyFlowWorker.scheduleReuseLinkRepair(false);
       return;
     }
+    case "quality-upgrade-check": {
+      const { runQualityUpgradeCheck } = await import("./qualityProfileService.js");
+      await runQualityUpgradeCheck({
+        force: payload.force === true,
+        playlistId: payload.playlistId || null,
+        limit: payload.limit,
+      });
+      return;
+    }
+    case "quality-profile-refresh": {
+      const { reclassifyQualityJobs, getQualityProfile } = await import(
+        "./qualityProfileService.js"
+      );
+      await reclassifyQualityJobs({ enqueue: getQualityProfile().automaticUpgrades });
+      return;
+    }
     case "weekly-flow-startup-reuse-repair": {
       const { weeklyFlowWorker } = await import("./weeklyFlow/weeklyFlowWorker.js");
       weeklyFlowWorker.scheduleReuseLinkRepair(true);

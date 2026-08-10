@@ -454,6 +454,19 @@ for (const { name, results, track, options, assertRanked } of rankFlowCases) {
   });
 }
 
+test("rankFlowSearchResults preserves M4A as the preferred format", () => {
+  const ranked = rankFlowSearchResults(
+    [
+      result({ user: "sameUser", file: "Artist\\Album\\01 - Song.flac" }),
+      result({ user: "sameUser", file: "Artist\\Album\\01 - Song.m4a" }),
+    ],
+    { artistName: "Artist", trackName: "Song", albumName: "Album", trackNumber: 1 },
+    { preferredFormat: "m4a", strictFormat: false },
+  );
+
+  assert.equal(ranked[0]?.ext, ".m4a");
+});
+
 test("selectRankedMatchAttempts spreads early attempts across users before reusing one", () => {
   const selected = selectRankedMatchAttempts(
     [
@@ -483,7 +496,7 @@ test("selectRankedMatchAttempts spreads early attempts across users before reusi
   );
 });
 
-test("validateDownloadedTrack scores accepted candidates and rejects live mismatches", async () => {
+test("validateDownloadedTrack scores identity before final quality admission", async () => {
   const rejected = await validateDownloadedTrack(
     "/tmp/does-not-exist.mp3",
     {
@@ -517,7 +530,8 @@ test("validateDownloadedTrack scores accepted candidates and rejects live mismat
       durationMs: 433000,
     },
   );
-  assert.equal(accepted.valid, true);
+  assert.equal(accepted.valid, false);
+  assert.match(accepted.reason, /^quality-unknown:/);
   assert.notEqual(accepted.scores.matchReason, "pre-download-trusted");
   assert.equal(accepted.scores.preDownloadValid, true);
   assert.ok(accepted.scores.title >= 82);
