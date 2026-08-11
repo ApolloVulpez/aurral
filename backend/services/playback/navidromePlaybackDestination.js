@@ -21,6 +21,19 @@ const ARTWORK_SUPPRESS_SUFFIX = ".no-artwork";
 const PLAYLIST_FILE_EXTENSIONS = [".m3u", ".nsp"];
 const SONG_LOOKUP_BATCH_SIZE = 5;
 
+function buildM3uContent(tracks) {
+  const lines = ["#EXTM3U"];
+  for (const track of tracks) {
+    const duration = Math.max(0, Math.round(Number(track.durationMs) / 1000 || 0));
+    const label = track.artist && track.title
+      ? `${track.artist} - ${track.title}`
+      : track.title || track.artist || "";
+    lines.push(`#EXTINF:${duration},${label}`);
+    lines.push(String(track.path || "").replace(/\\/g, "/"));
+  }
+  return `${lines.join("\n")}\n`;
+}
+
 export class NavidromePlaybackDestination {
   constructor(weeklyFlowRoot = resolvePlaylistRoot(), { client = null } = {}) {
     this.key = "navidrome";
@@ -94,6 +107,31 @@ export class NavidromePlaybackDestination {
     });
   }
 
+  _getImportedSourceName(comment) {
+    const match = String(comment || "").match(/Auto-imported from ['"]([^'"]+)['"]/i);
+    if (!match) return null;
+    return this._sanitize(path.basename(match[1], path.extname(match[1])));
+  }
+
+  _isActiveNameForOtherEntity(entityId, name) {
+    const expected = this._sanitize(name);
+    const entities = [
+      ...flowPlaylistConfig.getFlows(),
+      ...flowPlaylistConfig.getSharedPlaylists(),
+    ];
+    return entities.some((entity) => {
+      if (entity.id === entityId) return false;
+      const names = this.getPlaylistNames({
+        entityId: entity.id,
+        ownerUserId: entity.ownerUserId,
+        displayName: entity.name,
+      });
+      return [names.current, ...names.legacy].some(
+        (candidate) => this._sanitize(candidate) === expected,
+      );
+    });
+  }
+
   async _loadPlaylists(force = false) {
     if (!this.isConfigured()) return [];
     if (!force && this._playlists) return this._playlists;
@@ -137,6 +175,75 @@ export class NavidromePlaybackDestination {
           await fs.unlink(path.join(this.libraryRoot, `${baseName}${extension}`));
         } catch {}
       }
+    }
+  }
+
+  async _uploadPlaylistArtwork(snapshot, playlistId) {
+    if (typeof this.client?.uploadPlaylistArtwork !== "function") return;
+    const { current } = this.getPlaylistNames(snapshot);
+    for (const extension of ARTWORK_FILE_EXTENSIONS) {
+      const artworkPath = path.join(this.libraryRoot, `${this._sanitize(current)}${extension}`);
+      const data = await fs.readFile(artworkPath).catch(() => null);
+      if (!data) continue;
+      const contentType = extension === ".png"
+        ? "image/png"
+        : extension === ".jpg" ? "image/jpeg" : "image/webp";
+      try {
+        await this.client.uploadPlaylistArtwork(
+          playlistId,
+          data,
+          path.basename(artworkPath),
+          contentType,
+        );
+      } catch (error) {
+        console.warn(
+          "[NavidromePlaybackDestination] Failed to upload playlist artwork:",
+          error?.message,
+        );
+      }
+      return;
+    }
+  }
+
+  async syncPlaylistArtwork({ entityId, ownerUserId = null } = {}) {
+    try {
+      if (!this.isConfigured()) return playbackOperationSuccess();
+      const entity = this._getEntity(entityId);
+      const targetKey = this._targetKey(ownerUserId);
+      const pointer = navidromePlaylistPointerStore.getPointer(entityId, targetKey);
+      if (!entity || !pointer) return playbackOperationSuccess();
+      await this._uploadPlaylistArtwork({
+        entityId,
+        ownerUserId,
+        displayName: entity.name,
+      }, pointer.playlistId);
+      return playbackOperationSuccess();
+    } catch (error) {
+      return playbackOperationFailure({
+        code: "PLAYLIST_ARTWORK_SYNC_FAILED",
+        message: error?.message || "Could not sync Navidrome playlist artwork",
+        retryable: true,
+      });
+    }
+  }
+
+  async clearPlaylistArtwork({ entityId, ownerUserId = null } = {}) {
+    try {
+      if (!this.isConfigured() || typeof this.client?.deletePlaylistArtwork !== "function") {
+        return playbackOperationSuccess();
+      }
+      const pointer = navidromePlaylistPointerStore.getPointer(
+        entityId,
+        this._targetKey(ownerUserId),
+      );
+      if (pointer) await this.client.deletePlaylistArtwork(pointer.playlistId);
+      return playbackOperationSuccess();
+    } catch (error) {
+      return playbackOperationFailure({
+        code: "PLAYLIST_ARTWORK_CLEAR_FAILED",
+        message: error?.message || "Could not clear Navidrome playlist artwork",
+        retryable: true,
+      });
     }
   }
 
@@ -239,6 +346,14 @@ export class NavidromePlaybackDestination {
     if (pointer && this._syncHashes.get(syncKey) === syncHash) {
       return playbackOperationSuccess();
     }
+    if (pointer && typeof this.client.getPlaylist === "function") {
+      const nativePlaylist = await this.client.getPlaylist(pointer.playlistId).catch(() => null);
+      const importedSourceName = this._getImportedSourceName(nativePlaylist?.comment);
+      if (importedSourceName && this._isActiveNameForOtherEntity(snapshot.entityId, importedSourceName)) {
+        navidromePlaylistPointerStore.deletePointer(snapshot.entityId, targetKey);
+        pointer = null;
+      }
+    }
     const files = await fs.readdir(this.libraryRoot).catch(() => []);
     const normalizeTrackPath = (value) => path
       .normalize(String(value || "").replace(/\\/g, "/"))
@@ -255,17 +370,26 @@ export class NavidromePlaybackDestination {
         continue;
       }
       const content = await fs.readFile(path.join(this.libraryRoot, file), "utf8").catch(() => "");
-      const matchesTrack = content
+      const importedTrackPaths = new Set(content
         .split(/\r?\n/)
         .filter((line) => line && !line.startsWith("#"))
-        .some((line) => trackPaths.has(normalizeTrackPath(line)));
-      if (matchesTrack) importedPlaylistNames.push(name);
+        .map(normalizeTrackPath));
+      const matchesTrackSet = trackPaths.size > 0
+        && importedTrackPaths.size === trackPaths.size
+        && [...importedTrackPaths].every((trackPath) => trackPaths.has(trackPath));
+      if (matchesTrackSet) importedPlaylistNames.push(name);
     }
     let importedPlaylistName = null;
-    if (!pointer && importedPlaylistNames.length) {
+    if (!pointer) {
       const playlists = await this._loadPlaylists();
       const importedPlaylist = playlists.find(
-        (playlist) => importedPlaylistNames.includes(playlist.name)
+        (playlist) => (
+          importedPlaylistNames.includes(playlist.name)
+          || this._getImportedSourceName(playlist.comment) === this._sanitize(current)
+          || legacy.some(
+            (name) => this._getImportedSourceName(playlist.comment) === this._sanitize(name),
+          )
+        )
           && !navidromePlaylistPointerStore.hasPlaylistId(playlist.id),
       );
       if (importedPlaylist) {
@@ -290,25 +414,36 @@ export class NavidromePlaybackDestination {
         batch.map((track) => this.client.findSong(track.title, track.artist, track)),
       ));
     }
-    if (songs.some((song) => !song?.id)) {
+    const hasUnresolvedSongs = songs.some((song) => !song?.id);
+    const songIds = songs.filter((song) => song?.id).map((song) => song.id);
+    if (snapshot.tracks.length && !songIds.length && !pointer) {
+      await fs.writeFile(
+        path.join(this.libraryRoot, `${this._sanitize(current)}.m3u`),
+        buildM3uContent(snapshot.tracks),
+        "utf8",
+      );
       this._pendingSnapshots.set(`${snapshot.entityId}:${targetKey}`, snapshot);
       return playbackOperationSuccess();
     }
 
     let playlist = null;
     if (pointer) {
-      for (const delayMs of [0, 250, 1000, 2000]) {
-        if (delayMs) await wait(delayMs);
-        try {
-          await this.client.updatePlaylist(pointer.playlistId, {
-            name: current,
-            songIds: songs.map((song) => song.id),
-          });
-          playlist = { id: pointer.playlistId };
-          break;
-        } catch (error) {
-          if (Number(error?.code) !== 70) throw error;
+      if (songIds.length) {
+        for (const delayMs of [0, 250, 1000, 2000]) {
+          if (delayMs) await wait(delayMs);
+          try {
+            await this.client.updatePlaylist(pointer.playlistId, {
+              name: current,
+              songIds,
+            });
+            playlist = { id: pointer.playlistId };
+            break;
+          } catch (error) {
+            if (Number(error?.code) !== 70) throw error;
+          }
         }
+      } else {
+        playlist = { id: pointer.playlistId };
       }
       if (!playlist) {
         navidromePlaylistPointerStore.deletePointer(snapshot.entityId, targetKey);
@@ -320,7 +455,6 @@ export class NavidromePlaybackDestination {
         importedPlaylistNames.includes(candidate.name)
         && !navidromePlaylistPointerStore.hasPlaylistId(candidate.id),
       );
-      const songIds = songs.map((song) => song.id);
       if (playlist) {
         await this.client.updatePlaylist(playlist.id, { name: current, songIds });
       } else {
@@ -332,6 +466,11 @@ export class NavidromePlaybackDestination {
       playlistId: playlist.id,
       title: current,
     });
+    await this._uploadPlaylistArtwork(snapshot, playlist.id);
+    if (hasUnresolvedSongs) {
+      this._pendingSnapshots.set(`${snapshot.entityId}:${targetKey}`, snapshot);
+      return playbackOperationSuccess();
+    }
     this._pendingSnapshots.delete(`${snapshot.entityId}:${targetKey}`);
     this._playlists = null;
     const cleanupNames = [current, ...legacy, importedPlaylistName, pointer?.title];

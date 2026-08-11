@@ -31,7 +31,16 @@ const weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER;
 
 function createClient({ configured = true, playlists = [], songs = {} } = {}) {
   const currentPlaylists = playlists.map((playlist) => ({ ...playlist }));
-  const calls = { created: [], deleted: [], ensured: [], renamed: [], scans: 0, updated: [] };
+  const calls = {
+    artwork: [],
+    created: [],
+    deleted: [],
+    ensured: [],
+    renamed: [],
+    scans: 0,
+    artworkDeleted: [],
+    updated: [],
+  };
   return {
     calls,
     isConfigured: () => configured,
@@ -41,6 +50,9 @@ function createClient({ configured = true, playlists = [], songs = {} } = {}) {
     },
     async getPlaylists() {
       return currentPlaylists;
+    },
+    async getPlaylist(id) {
+      return currentPlaylists.find((playlist) => playlist.id === id) || null;
     },
     async findSong(title) {
       return songs[title] || null;
@@ -55,6 +67,12 @@ function createClient({ configured = true, playlists = [], songs = {} } = {}) {
       calls.updated.push({ id, ...payload });
       const playlist = currentPlaylists.find((candidate) => candidate.id === id);
       if (playlist) playlist.name = payload.name;
+    },
+    async uploadPlaylistArtwork(id, data, filename, contentType) {
+      calls.artwork.push({ id, size: data.length, filename, contentType });
+    },
+    async deletePlaylistArtwork(id) {
+      calls.artworkDeleted.push(id);
     },
     async renamePlaylist(id, name) {
       calls.renamed.push({ id, name });
@@ -84,7 +102,7 @@ test.after(async () => {
 test("ensures the Navidrome library without creating an M3U playlist", async () => {
   const owner = userOps.createUser("jody", "hash", "user");
   const flow = flowPlaylistConfig.createFlow({ name: "Morning Mix", ownerUserId: owner.id });
-  const client = createClient();
+  const client = createClient({ songs: { Song: { id: "song-1" } } });
   const destination = new NavidromePlaybackDestination(weeklyFlowRoot, { client });
 
   assert.deepEqual(await destination.ensureLibrary(), { ok: true });
@@ -154,6 +172,55 @@ test("publishes resolved tracks through the Subsonic API and stores the playlist
   );
 });
 
+test("uploads generated artwork for API playlists", async () => {
+  const playlist = flowPlaylistConfig.createSharedPlaylist({ name: "Art Mix" });
+  const client = createClient({ songs: { Song: { id: "song-1" } } });
+  const destination = new NavidromePlaybackDestination(weeklyFlowRoot, { client });
+  await fs.mkdir(destination.libraryRoot, { recursive: true });
+  await fs.writeFile(path.join(destination.libraryRoot, "Art Mix.webp"), "image");
+
+  await destination.publishPlaylist(
+    createPlaybackPlaylistSnapshot({
+      entityId: playlist.id,
+      displayName: playlist.name,
+      tracks: [{ path: "/music/song.flac", title: "Song", artist: "Artist" }],
+    }),
+  );
+
+  assert.deepEqual(client.calls.artwork, [{
+    id: "created",
+    size: 5,
+    filename: "Art Mix.webp",
+    contentType: "image/webp",
+  }]);
+});
+
+test("syncs and clears artwork for an existing API playlist", async () => {
+  const playlist = flowPlaylistConfig.createSharedPlaylist({ name: "Artwork Sync" });
+  const client = createClient({ songs: { Song: { id: "song-1" } } });
+  const destination = new NavidromePlaybackDestination(weeklyFlowRoot, { client });
+  await fs.mkdir(destination.libraryRoot, { recursive: true });
+  await fs.writeFile(path.join(destination.libraryRoot, "Artwork Sync.webp"), "image");
+  await destination.publishPlaylist(
+    createPlaybackPlaylistSnapshot({
+      entityId: playlist.id,
+      displayName: playlist.name,
+      tracks: [{ path: "/music/song.flac", title: "Song", artist: "Artist" }],
+    }),
+  );
+
+  assert.deepEqual(
+    await destination.syncPlaylistArtwork({ entityId: playlist.id }),
+    { ok: true },
+  );
+  assert.deepEqual(client.calls.artwork.map(({ id }) => id), ["created", "created"]);
+  assert.deepEqual(
+    await destination.clearPlaylistArtwork({ entityId: playlist.id }),
+    { ok: true },
+  );
+  assert.deepEqual(client.calls.artworkDeleted, ["created"]);
+});
+
 test("bounds concurrent Navidrome song lookups and preserves track order", async () => {
   const playlist = flowPlaylistConfig.createSharedPlaylist({ name: "Large API Mix" });
   const tracks = Array.from({ length: 6 }, (_, index) => ({
@@ -207,6 +274,26 @@ test("creates an empty API playlist without waiting for a scan", async () => {
     { ok: true },
   );
   assert.deepEqual(client.calls.created, [{ name: "Empty", songIds: [] }]);
+});
+
+test("keeps an M3U fallback when no songs are indexed", async () => {
+  const playlist = flowPlaylistConfig.createSharedPlaylist({ name: "Unindexed" });
+  const client = createClient();
+  const destination = new NavidromePlaybackDestination(weeklyFlowRoot, { client });
+
+  await destination.publishPlaylist(
+    createPlaybackPlaylistSnapshot({
+      entityId: playlist.id,
+      displayName: playlist.name,
+      tracks: [{ path: "/music/song.flac", title: "Song", artist: "Artist" }],
+    }),
+  );
+
+  assert.deepEqual(client.calls.created, []);
+  assert.equal(
+    await fs.readFile(path.join(destination.libraryRoot, "Unindexed.m3u"), "utf8"),
+    "#EXTM3U\n#EXTINF:0,Artist - Song\n/music/song.flac\n",
+  );
 });
 
 test("serializes concurrent publishes before creating a native playlist", async () => {
@@ -308,6 +395,72 @@ test("adopts an imported M3U playlist and keeps its ID across rename and delete"
   );
   assert.deepEqual(client.calls.deleted, ["imported-id"]);
   assert.equal(navidromePlaylistPointerStore.getPointer(playlist.id, "global"), null);
+});
+
+test("adopts an imported API playlist from its source comment", async () => {
+  const playlist = flowPlaylistConfig.createSharedPlaylist({ name: "Comment Recovery" });
+  const client = createClient({
+    playlists: [{
+      id: "comment-id",
+      name: "Imported Legacy Name",
+      comment: "Auto-imported from 'Comment Recovery.m3u'",
+    }],
+    songs: { Song: { id: "song-1" } },
+  });
+  const destination = new NavidromePlaybackDestination(weeklyFlowRoot, { client });
+
+  await destination.publishPlaylist(
+    createPlaybackPlaylistSnapshot({
+      entityId: playlist.id,
+      displayName: playlist.name,
+      tracks: [{ path: "/music/song.flac", title: "Song", artist: "Artist" }],
+    }),
+  );
+
+  assert.deepEqual(client.calls.renamed, [
+    { id: "comment-id", name: "Comment Recovery" },
+  ]);
+  assert.deepEqual(client.calls.created, []);
+  assert.equal(
+    navidromePlaylistPointerStore.getPointer(playlist.id, "global").playlistId,
+    "comment-id",
+  );
+});
+
+test("replaces a pointer whose imported source belongs to another entity", async () => {
+  const original = flowPlaylistConfig.createSharedPlaylist({ name: "Original" });
+  const wrong = flowPlaylistConfig.createSharedPlaylist({ name: "Wrong Target" });
+  const client = createClient({
+    playlists: [{
+      id: "foreign-id",
+      name: "Wrong Target",
+      comment: "Auto-imported from 'Original.m3u'",
+    }],
+    songs: { Song: { id: "song-1" } },
+  });
+  const destination = new NavidromePlaybackDestination(weeklyFlowRoot, { client });
+  navidromePlaylistPointerStore.setPointer(wrong.id, "global", {
+    playlistId: "foreign-id",
+    title: wrong.name,
+  });
+
+  await destination.publishPlaylist(
+    createPlaybackPlaylistSnapshot({
+      entityId: wrong.id,
+      displayName: wrong.name,
+      tracks: [{ path: "/music/song.flac", title: "Song", artist: "Artist" }],
+    }),
+  );
+
+  assert.deepEqual(client.calls.created, [
+    { name: "Wrong Target", songIds: ["song-1"] },
+  ]);
+  assert.deepEqual(client.calls.renamed, []);
+  assert.equal(
+    navidromePlaylistPointerStore.getPointer(wrong.id, "global").playlistId,
+    "created",
+  );
+  assert.equal(navidromePlaylistPointerStore.getPointer(original.id, "global"), null);
 });
 
 test("keeps a stored playlist during rename cleanup until tracks resolve", async () => {
@@ -438,7 +591,7 @@ test("does not adopt an imported playlist from a colliding track basename", asyn
   await fs.mkdir(destination.libraryRoot, { recursive: true });
   await fs.writeFile(
     path.join(destination.libraryRoot, "Legacy Collision.m3u"),
-    "#EXTM3U\n/music/other/intro.flac\n",
+    "#EXTM3U\n/music/expected/intro.flac\n/music/other/intro.flac\n",
   );
 
   await destination.publishPlaylist(
@@ -482,25 +635,31 @@ test("does not adopt a same-name playlist claimed by another Aurral entity", asy
   assert.deepEqual(client.calls.created, [{ name: "Same Name", songIds: ["song-1"] }]);
 });
 
-test("creates the API playlist after Navidrome indexes a missing song", async () => {
+test("publishes resolved songs and catches up when Navidrome indexes the rest", async () => {
   const playlist = flowPlaylistConfig.createSharedPlaylist({ name: "Catch-up" });
-  const songs = {};
+  const songs = { Ready: { id: "ready-song" } };
   const client = createClient({ songs });
   const destination = new NavidromePlaybackDestination(weeklyFlowRoot, { client });
   const snapshot = createPlaybackPlaylistSnapshot({
     entityId: playlist.id,
     displayName: playlist.name,
-    tracks: [{ path: "/music/song.flac", title: "Song", artist: "Artist" }],
+    tracks: [
+      { path: "/music/ready.flac", title: "Ready", artist: "Artist" },
+      { path: "/music/missing.flac", title: "Missing", artist: "Artist" },
+    ],
   });
 
   await destination.publishPlaylist(snapshot);
   await assert.rejects(fs.access(path.join(destination.libraryRoot, "Catch-up.m3u")));
-  songs.Song = { id: "indexed-song" };
+  assert.deepEqual(client.calls.created, [
+    { name: "Catch-up", songIds: ["ready-song"] },
+  ]);
+  songs.Missing = { id: "missing-song" };
   destination._scheduleCatchup([0]);
   while (destination._catchupRunning) await new Promise((resolve) => setTimeout(resolve, 1));
 
-  assert.deepEqual(client.calls.created, [
-    { name: "Catch-up", songIds: ["indexed-song"] },
+  assert.deepEqual(client.calls.updated, [
+    { id: "created", name: "Catch-up", songIds: ["ready-song", "missing-song"] },
   ]);
   await assert.rejects(fs.access(path.join(destination.libraryRoot, "Catch-up.m3u")));
 });
