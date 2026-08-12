@@ -3,6 +3,7 @@ import api from "../../../utils/api/core.js";
 import { checkHealth } from "../../../utils/api/endpoints/auth.js";
 import {
   getAppSettings,
+  getPlaybackSettings,
   updateAppSettings,
   getLidarrRootFolders,
   getLidarrProfiles,
@@ -184,6 +185,7 @@ const defaultSettings = {
 const AUTOSAVE_DELAY_MS = 450;
 
 export function useSettingsData(showSuccess, showError, showInfo) {
+  const [playbackSettings, setPlaybackSettings] = useState(null);
   const [health, setHealth] = useState(null);
   const [settings, setSettingsState] = useState(defaultSettings);
   const [originalSettings, setOriginalSettings] = useState(null);
@@ -282,6 +284,11 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     if (settingsActivationTimerRef.current) clearTimeout(settingsActivationTimerRef.current);
     try {
       const [, savedSettings] = await Promise.all([refreshHealth(), getAppSettings()]);
+      let playback = null;
+      try {
+        playback = await getPlaybackSettings();
+      } catch {}
+      setPlaybackSettings(playback?.destinations || null);
       const updatedSettings = normalizeSettings(savedSettings);
       const savedSnapshot = structuredClone(updatedSettings);
       settingsRef.current = updatedSettings;
@@ -608,6 +615,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
   return {
     health,
     settings,
+    playbackSettings,
     updateSettings,
     originalSettings,
     hasUnsavedChanges,
