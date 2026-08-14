@@ -172,8 +172,55 @@ test("runStorageHealthCheck skips optional integrations when unset", async () =>
   const result = await runStorageHealthCheck();
   const slskd = result.sections.find((section) => section.id === "slskd");
   const navidrome = result.sections.find((section) => section.id === "navidrome");
+  const nativePlayback = result.sections.find((section) => section.id === "native-playback");
   assert.equal(slskd?.status, "skip");
   assert.equal(navidrome?.status, "skip");
+  assert.equal(nativePlayback?.status, "warn");
+  assert.match(nativePlayback?.steps[0]?.fix || "", /index refresh/i);
+});
+
+test("native playback passes when any available file is readable", async () => {
+  const {
+    linkLibraryAlbumTrack,
+    upsertLibraryAlbum,
+    upsertLibraryArtist,
+    upsertLibraryMediaFile,
+    upsertLibraryTrack,
+  } = await importFromRepo("backend/services/libraryMediaStore.js");
+  const artist = upsertLibraryArtist({
+    identityKey: "storage-health:artist",
+    name: "Storage Artist",
+  });
+  const album = upsertLibraryAlbum({
+    identityKey: "storage-health:album",
+    artistId: artist.id,
+    title: "Storage Album",
+    albumArtist: artist.name,
+  });
+  const track = upsertLibraryTrack({
+    identityKey: "storage-health:track",
+    title: "Storage Track",
+    artistName: artist.name,
+  });
+  linkLibraryAlbumTrack({ albumId: album.id, trackId: track.id, trackNumber: 1 });
+  const readablePath = path.join(process.env.DOWNLOAD_FOLDER, "1-readable.flac");
+  await fs.writeFile(readablePath, "audio");
+  upsertLibraryMediaFile({
+    trackId: track.id,
+    source: "lidarr",
+    path: path.join(process.env.DOWNLOAD_FOLDER, "0-stale.flac"),
+    available: true,
+  });
+  upsertLibraryMediaFile({
+    trackId: track.id,
+    source: "aurral",
+    path: readablePath,
+    available: true,
+  });
+
+  const result = await runStorageHealthCheck({ force: true });
+  const nativePlayback = result.sections.find((section) => section.id === "native-playback");
+  assert.equal(nativePlayback?.status, "pass");
 });
 
 test("runStorageHealthCheck passes shared volume when dedicated browse roots exist", async () => {

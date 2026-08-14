@@ -1,19 +1,28 @@
 import express from "express";
 
 import { APP_NAME, APP_VERSION } from "../config/constants.js";
-import { resolveUser } from "../middleware/auth.js";
+import { resolveSubsonicTokenUser, resolveUser } from "../middleware/auth.js";
 import { streamAudioFile } from "../services/audioFileStream.js";
 import {
   getAlbum,
+  getAlbumList,
   getArtist,
+  getArtistInfo,
   getFlowPlaylist,
   getFlowPlaylists,
+  getGenres,
   getMusicDirectory,
   getSong,
+  getSongsByGenre,
+  getStarred,
+  getTopSongs,
   listArtists,
+  resolvePlaylistArtwork,
   resolveArtworkUrl,
   resolveStreamPath,
   searchLibrary,
+  starMany,
+  unstarMany,
 } from "../services/subsonicLibraryService.js";
 
 const SUBSONIC_VERSION = "1.16.1";
@@ -24,6 +33,14 @@ const getParameter = (req, name) => {
   const value = req.query?.[name];
   return String(Array.isArray(value) ? value[0] || "" : value || "");
 };
+
+const getParameters = (req, names) =>
+  names.flatMap((name) => {
+    const value = req.query?.[name];
+    return (Array.isArray(value) ? value : [value])
+      .map((entry) => String(entry || "").trim())
+      .filter(Boolean);
+  });
 
 const escapeXml = (value) =>
   String(value)
@@ -158,23 +175,73 @@ async function handleSubsonicRequest(req, res) {
   if (validation.error) return sendError(res, validation.format, ...validation.error);
 
   const { format, password, token, salt } = validation;
-  if (token && salt && !password) {
-    return sendError(res, format, 41, "Token authentication is not supported.");
-  }
-
-  const decodedPassword = decodePassword(password);
-  const user = decodedPassword == null ? null : resolveUser(getParameter(req, "u"), decodedPassword);
+  const decodedPassword = password ? decodePassword(password) : null;
+  const user = password
+    ? decodedPassword == null
+      ? null
+      : resolveUser(getParameter(req, "u"), decodedPassword)
+    : resolveSubsonicTokenUser(getParameter(req, "u"), token, salt);
   if (!user) return sendError(res, format, 40, "Wrong username or password");
   req.user = user;
 
   const method = String(req.params.method || "").replace(/\.view$/i, "").toLowerCase();
   if (method === "ping") return sendResponse(res, format);
+  if (method === "getuser") {
+    const isAdmin = req.user.role === "admin";
+    return sendResponse(res, format, "ok", null, {
+      user: {
+        username: req.user.username,
+        adminRole: isAdmin,
+        commentRole: false,
+        coverArtRole: true,
+        downloadRole: true,
+        folder: ["root"],
+        jukeboxRole: false,
+        playlistRole: Boolean(req.user.permissions?.accessFlow),
+        podcastRole: false,
+        scrobblingEnabled: false,
+        settingsRole: isAdmin,
+        shareRole: false,
+        streamRole: true,
+        uploadRole: false,
+      },
+    });
+  }
   if (method === "getlicense") {
     return sendResponse(res, format, "ok", null, { license: { valid: true } });
   }
   if (method === "getmusicfolders") {
     return sendResponse(res, format, "ok", null, {
       musicFolders: { musicFolder: [{ id: "root", name: APP_NAME }] },
+    });
+  }
+  if (method === "getalbumlist2") {
+    return sendResponse(res, format, "ok", null, {
+      albumList2: {
+        album: getAlbumList({
+          fromYear: getParameter(req, "fromYear"),
+          genre: getParameter(req, "genre"),
+          offset: getParameter(req, "offset"),
+          size: getParameter(req, "size"),
+          toYear: getParameter(req, "toYear"),
+          type: getParameter(req, "type"),
+        }),
+      },
+    });
+  }
+  if (method === "getgenres") {
+    return sendResponse(res, format, "ok", null, { genres: { genre: getGenres() } });
+  }
+  if (method === "getsongsbygenre") {
+    const genre = getParameter(req, "genre").trim();
+    if (!genre) return sendError(res, format, 10, "Required parameter is missing: genre");
+    return sendResponse(res, format, "ok", null, {
+      songsByGenre: {
+        song: getSongsByGenre(genre, {
+          count: getParameter(req, "count"),
+          offset: getParameter(req, "offset"),
+        }),
+      },
     });
   }
   if (method === "getartists" || method === "getindexes") {
@@ -191,6 +258,12 @@ async function handleSubsonicRequest(req, res) {
     const artist = getArtist(getParameter(req, "id"));
     return artist
       ? sendResponse(res, format, "ok", null, { artist })
+      : sendError(res, format, 70, "Requested data was not found");
+  }
+  if (method === "getartistinfo") {
+    const artistInfo = getArtistInfo(getParameter(req, "id"));
+    return artistInfo
+      ? sendResponse(res, format, "ok", null, { artistInfo })
       : sendError(res, format, 70, "Requested data was not found");
   }
   if (method === "getalbum") {
@@ -213,13 +286,35 @@ async function handleSubsonicRequest(req, res) {
   }
   if (method === "search3" || method === "search2") {
     const query = getParameter(req, "query");
-    if (!query) return sendError(res, format, 10, "Required parameter is missing: query");
     return sendResponse(res, format, "ok", null, {
       [method === "search3" ? "searchResult3" : "searchResult2"]: searchLibrary(query, req.query),
     });
   }
   if (method === "getplaylists") {
     return sendResponse(res, format, "ok", null, { playlists: { playlist: getFlowPlaylists(user) } });
+  }
+  if (method === "getstarred" || method === "getstarred2") {
+    return sendResponse(res, format, "ok", null, {
+      [method === "getstarred" ? "starred" : "starred2"]: getStarred(user),
+    });
+  }
+  if (method === "star" || method === "unstar") {
+    const targets = getParameters(req, ["id", "albumId", "artistId"]);
+    const changed = method === "star"
+      ? starMany(user, targets)
+      : unstarMany(user, targets);
+    return changed
+      ? sendResponse(res, format)
+      : sendError(res, format, 70, "Requested data was not found");
+  }
+  if (method === "gettopsongs") {
+    const artist = String(getParameter(req, "artist") || "").trim();
+    if (!artist) return sendError(res, format, 10, "Required parameter is missing: artist");
+    return sendResponse(res, format, "ok", null, {
+      topSongs: {
+        song: getTopSongs(artist, { count: getParameter(req, "count") }),
+      },
+    });
   }
   if (method === "getplaylist") {
     const playlist = getFlowPlaylist(getParameter(req, "id"), user);
@@ -234,8 +329,15 @@ async function handleSubsonicRequest(req, res) {
     return streamed || res.headersSent ? undefined : handleBinaryError(res, "Track file missing");
   }
   if (method === "getcoverart") {
+    const playlistArtwork = await resolvePlaylistArtwork(getParameter(req, "id"), user);
+    if (playlistArtwork) {
+      res.set("Cache-Control", "private, max-age=86400");
+      return res.sendFile(playlistArtwork.safePath);
+    }
     const artworkUrl = await resolveArtworkUrl(getParameter(req, "id"));
-    return artworkUrl ? res.redirect(302, artworkUrl) : handleBinaryError(res, "Cover art not found");
+    if (!artworkUrl) return handleBinaryError(res, "Cover art not found");
+    res.set("Cache-Control", "public, max-age=31536000, immutable");
+    return res.redirect(302, artworkUrl);
   }
   return sendError(res, format, 0, `Unsupported request: ${method}`);
 }
