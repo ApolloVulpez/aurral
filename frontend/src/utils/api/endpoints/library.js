@@ -6,13 +6,122 @@ import {
   libraryLookupCache,
   setLibraryLookupCacheEntry,
   buildAuthenticatedApiUrl,
+  getRequestToken,
 } from "../core.js";
 
 const buildStreamUrl = (path) => buildAuthenticatedApiUrl(path);
 const SLOW_LIBRARY_REQUEST_TIMEOUT_MS = 90000;
+const LIBRARY_FAVORITES_CACHE_TTL_MS = 30000;
+const LIBRARY_PAGE_CACHE_TTL_MS = 15000;
+const MAX_LIBRARY_PAGE_CACHE_SIZE = 100;
+const libraryPageCache = new Map();
+const libraryPageRequests = new Map();
 
 export const getLibraryArtists = (options = {}) =>
   getData("/library/artists", options);
+
+export const getCanonicalLibrary = (options = {}) =>
+  getData("/library/canonical", {
+    params: {
+      source: options.source || "all",
+      availableOnly: options.availableOnly === true ? "true" : "false",
+    },
+    signal: options.signal,
+  });
+
+export const getCanonicalLibraryPage = (options = {}) => {
+  const params = Object.fromEntries(
+    Object.entries({
+      kind: options.kind,
+      page: options.page,
+      pageSize: options.pageSize,
+      query: options.query,
+      genre: options.genre,
+      sort: options.sort,
+      direction: options.direction,
+      artistId: options.artistId,
+      albumId: options.albumId,
+      source: options.source || "all",
+      availableOnly: options.availableOnly === true ? "true" : "false",
+    }).filter(([, value]) => value !== undefined && value !== null && value !== ""),
+  );
+  const cacheKey = `${getRequestToken()}:${JSON.stringify(params)}`;
+  const cached = libraryPageCache.get(cacheKey);
+  if (cached && Date.now() < cached.expiresAt) return Promise.resolve(cached.data);
+  if (cached) libraryPageCache.delete(cacheKey);
+  if (libraryPageRequests.has(cacheKey)) return libraryPageRequests.get(cacheKey);
+  const request = getData("/library/canonical", { params })
+    .then((data) => {
+      libraryPageCache.delete(cacheKey);
+      libraryPageCache.set(cacheKey, { data, expiresAt: Date.now() + LIBRARY_PAGE_CACHE_TTL_MS });
+      if (libraryPageCache.size > MAX_LIBRARY_PAGE_CACHE_SIZE) {
+        libraryPageCache.delete(libraryPageCache.keys().next().value);
+      }
+      return data;
+    })
+    .finally(() => libraryPageRequests.delete(cacheKey));
+  libraryPageRequests.set(cacheKey, request);
+  return request;
+};
+
+export const clearCanonicalLibraryPageCache = () => libraryPageCache.clear();
+
+let libraryFavoritesCache = null;
+let libraryFavoritesRequest = null;
+let libraryFavoritesGeneration = 0;
+
+export const getLibraryFavorites = () => {
+  const token = getRequestToken();
+  const generation = libraryFavoritesGeneration;
+  if (
+    libraryFavoritesCache?.token === token &&
+    libraryFavoritesCache?.generation === generation &&
+    Date.now() < libraryFavoritesCache.expiresAt
+  ) {
+    return Promise.resolve(libraryFavoritesCache.data);
+  }
+  if (
+    libraryFavoritesRequest?.token === token &&
+    libraryFavoritesRequest?.generation === generation
+  ) return libraryFavoritesRequest.promise;
+  let promise;
+  promise = getData("/library/favorites")
+    .then((data) => {
+      if (getRequestToken() === token && libraryFavoritesGeneration === generation) {
+        libraryFavoritesCache = {
+          token,
+          generation,
+          data,
+          expiresAt: Date.now() + LIBRARY_FAVORITES_CACHE_TTL_MS,
+        };
+      }
+      return data;
+    })
+    .finally(() => {
+      if (libraryFavoritesRequest?.promise === promise) libraryFavoritesRequest = null;
+    });
+  libraryFavoritesRequest = { token, generation, promise };
+  return promise;
+};
+
+export const updateLibraryFavorites = async (ids, starred) => {
+  const token = getRequestToken();
+  const generation = ++libraryFavoritesGeneration;
+  const data = await postData("/library/favorites", { ids, starred });
+  if (libraryFavoritesGeneration === generation) {
+    libraryFavoritesGeneration += 1;
+    libraryFavoritesCache = getRequestToken() === token
+      ? {
+        token,
+        generation: libraryFavoritesGeneration,
+        data,
+        expiresAt: Date.now() + LIBRARY_FAVORITES_CACHE_TTL_MS,
+      }
+      : null;
+  }
+  clearCanonicalLibraryPageCache();
+  return data;
+};
 
 export const getLibraryArtist = async (mbid) => {
   const artist = await getData(`/library/artists/${mbid}`);

@@ -71,12 +71,13 @@ export function buildLibraryAlbumNavigationItem(
   libraryAlbum,
   { artistMbid, artistName, coverUrl = "" } = {},
 ) {
-  const releaseGroupMbid = libraryAlbum?.mbid || libraryAlbum?.foreignAlbumId || null;
+  const releaseGroupMbid =
+    libraryAlbum?.releaseGroupMbid || libraryAlbum?.mbid || libraryAlbum?.foreignAlbumId || null;
   if (!releaseGroupMbid || !artistMbid) return null;
   return {
     type: "album",
     id: releaseGroupMbid,
-    title: libraryAlbum.albumName || "",
+    title: libraryAlbum.albumName || libraryAlbum.title || "",
     artistMbid,
     artistName: artistName || libraryAlbum.artistName || "",
     releaseDate: libraryAlbum.releaseDate || "",
