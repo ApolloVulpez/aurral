@@ -328,13 +328,14 @@ export function getSong(value, user) {
 }
 
 export function getMusicDirectory(value) {
-  if (value === "root") {
+  if (value === "root" || value === "1") {
+    const rootId = value === "1" ? "1" : "root";
     return {
-      id: "root",
+      id: rootId,
       name: "Aurral",
       child: listArtists().map((artist) => ({
         id: artist.id,
-        parent: "root",
+        parent: rootId,
         isDir: true,
         title: artist.name,
         artist: artist.name,
