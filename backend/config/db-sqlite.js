@@ -76,6 +76,19 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS lastfm_link_states (
+    token_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    browser_nonce_hash TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    consumed_at INTEGER,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_lastfm_link_states_expiry
+    ON lastfm_link_states(expires_at);
+
   CREATE TABLE IF NOT EXISTS subsonic_stars (
     user_id INTEGER NOT NULL,
     entity_kind TEXT NOT NULL,
@@ -84,6 +97,26 @@ db.exec(`
     PRIMARY KEY (user_id, entity_kind, entity_key),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS play_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    track_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    artist TEXT NOT NULL,
+    album TEXT,
+    artist_mbid TEXT,
+    album_mbid TEXT,
+    track_mbid TEXT,
+    duration_ms INTEGER,
+    played_at INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_play_events_user_played_at
+    ON play_events(user_id, played_at DESC);
 
   CREATE TABLE IF NOT EXISTS playlist_download_jobs (
     id TEXT PRIMARY KEY,

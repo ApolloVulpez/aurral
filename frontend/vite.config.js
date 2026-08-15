@@ -63,7 +63,8 @@ export default defineConfig(({ mode }) => {
       proxy: {
         "/api": {
           target: "http://localhost:3001",
-          changeOrigin: true,
+          changeOrigin: false,
+          xfwd: true,
           secure: false,
           ws: true,
           timeout: 60000,
@@ -72,6 +73,7 @@ export default defineConfig(({ mode }) => {
         "/sso/callback": {
           target: "http://localhost:3001",
           changeOrigin: true,
+          xfwd: true,
           secure: false,
         },
         "/ws": {
