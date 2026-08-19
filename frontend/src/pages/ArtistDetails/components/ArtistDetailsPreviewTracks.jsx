@@ -12,6 +12,8 @@ export function ArtistDetailsPreviewTracks({
   isArtistPlaybackActive,
   handlePreviewPlay,
   onAddTrackToPlaylist,
+  onAddTrackToLibrary,
+  libraryTrackSavingKeys,
   resolveMembershipTrack,
   playlists,
   playlistsLoading,
@@ -113,12 +115,19 @@ export function ArtistDetailsPreviewTracks({
                       <TrackPlaylistMenu
                         track={resolveMembershipTrack ? resolveMembershipTrack(track) : track}
                         menuVariant="preview-tracks"
+                        triggerVariant="kebab"
                         playlists={playlists}
                         loading={playlistsLoading}
                         saving={playlistSavingKey === trackId}
+                        librarySaving={libraryTrackSavingKeys?.has(trackId)}
                         error={playlistError}
                         defaultNewPlaylistName={getDefaultPlaylistName?.(track)}
                         onLoadPlaylists={onLoadPlaylists}
+                        onAddToLibrary={
+                          onAddTrackToLibrary
+                            ? () => onAddTrackToLibrary(track, null, trackId)
+                            : null
+                        }
                         onSelect={(target) => onAddTrackToPlaylist(track, target)}
                       />
                     </div>

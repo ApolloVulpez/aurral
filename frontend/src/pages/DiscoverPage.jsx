@@ -1,5 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { readLibraryLookupCache, lookupArtistsInLibraryBatch } from "../utils/api/endpoints/library.js";
+import {
+  lookupArtistInLibrary,
+  lookupArtistsInLibraryBatch,
+  readLibraryLookupCache,
+} from "../utils/api/endpoints/library.js";
 import { getMyDiscoverLayout, updateMyDiscoverLayout } from "../utils/api/endpoints/auth.js";
 
 import { useDiscoverNavigation } from "../hooks/useDiscoverNavigation";
@@ -379,6 +383,24 @@ function DiscoverPage() {
     [navigate],
   );
 
+  const handleOpenArtistInLibrary = useCallback(
+    async (artist) => {
+      const artistId = getArtistId(artist);
+      if (!artistId) return;
+      try {
+        const lookup = await lookupArtistInLibrary(artistId);
+        const canonicalId = lookup?.artist?.canonicalId;
+        if (!canonicalId) throw new Error("Library artist was not found");
+        navigate(`/library/artist/${encodeURIComponent(canonicalId)}`);
+        return true;
+      } catch (requestError) {
+        showError(requestError?.message || "Failed to open artist in library");
+        return false;
+      }
+    },
+    [navigate, showError],
+  );
+
   const discoverArtistIds = useMemo(() => {
     const ids = new Set();
     for (const artist of data?.recommendations || []) {
@@ -471,6 +493,7 @@ function DiscoverPage() {
                   isInLibrary={!!libraryLookup[getArtistId(artist)]}
                   canAddArtist={canAddArtist}
                   onNavigate={navigate}
+                  onOpenInLibrary={handleOpenArtistInLibrary}
                   onAddToLibrary={handleAddArtistToLibrary}
                   onFeedback={handleDiscoveryFeedback}
                   feedbackUsed={getArtistFeedbackFlags(artistFeedbackLookup, artist)}
@@ -503,6 +526,7 @@ function DiscoverPage() {
                     isInLibrary={!!libraryLookup[artistId]}
                     canAddArtist={false}
                     onNavigate={navigate}
+                    onOpenInLibrary={handleOpenArtistInLibrary}
                     artist={{
                       id: artistId,
                       name: artist.artistName,
@@ -610,6 +634,7 @@ function DiscoverPage() {
                     isInLibrary={!!libraryLookup[getArtistId(artist)]}
                     canAddArtist={canAddArtist}
                     onNavigate={navigate}
+                    onOpenInLibrary={handleOpenArtistInLibrary}
                     onAddToLibrary={handleAddArtistToLibrary}
                     onFeedback={handleDiscoveryFeedback}
                     feedbackUsed={getArtistFeedbackFlags(artistFeedbackLookup, artist)}
@@ -816,6 +841,7 @@ function DiscoverPage() {
                   isInLibrary={!!libraryLookup[getArtistId(artist)]}
                   canAddArtist={canAddArtist}
                   onNavigate={navigate}
+                  onOpenInLibrary={handleOpenArtistInLibrary}
                   onAddToLibrary={handleAddArtistToLibrary}
                   onFeedback={handleDiscoveryFeedback}
                   feedbackUsed={getArtistFeedbackFlags(artistFeedbackLookup, artist)}
@@ -855,6 +881,7 @@ function DiscoverPage() {
                       isInLibrary={!!libraryLookup[getArtistId(artist)]}
                       canAddArtist={canAddArtist}
                       onNavigate={navigate}
+                      onOpenInLibrary={handleOpenArtistInLibrary}
                       onAddToLibrary={handleAddArtistToLibrary}
                       onFeedback={handleDiscoveryFeedback}
                       feedbackUsed={getArtistFeedbackFlags(artistFeedbackLookup, artist)}

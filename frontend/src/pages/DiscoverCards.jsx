@@ -76,6 +76,7 @@ export const ArtistCard = memo(
     isInLibrary,
     canAddArtist,
     onNavigate,
+    onOpenInLibrary,
     onAddToLibrary,
     onFeedback,
     feedbackUsed = {},
@@ -93,7 +94,6 @@ export const ArtistCard = memo(
         });
       }
     }, [navigateTo, hasValidMbid, artist.name, isInLibrary, onNavigate]);
-
     return (
       <div
         role="button"
@@ -145,6 +145,7 @@ export const ArtistCard = memo(
               isInLibrary={isInLibrary}
               canAddArtist={canAddArtist}
               onAddToLibrary={onAddToLibrary}
+              onOpenInLibrary={onOpenInLibrary}
               onFeedback={onFeedback}
               feedbackUsed={feedbackUsed}
             />
@@ -169,6 +170,7 @@ export const ArtistCard = memo(
       prevProps.feedbackUsed?.less_like_this === nextProps.feedbackUsed?.less_like_this &&
       prevProps.feedbackUsed?.block_artist === nextProps.feedbackUsed?.block_artist &&
       prevProps.onNavigate === nextProps.onNavigate &&
+      prevProps.onOpenInLibrary === nextProps.onOpenInLibrary &&
       prevProps.onAddToLibrary === nextProps.onAddToLibrary &&
       prevProps.onFeedback === nextProps.onFeedback
     );
