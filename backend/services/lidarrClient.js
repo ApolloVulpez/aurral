@@ -51,6 +51,16 @@ function normalizeLidarrArtistId(value) {
   return Number.isSafeInteger(parsed) && parsed > 0 ? String(parsed) : null;
 }
 
+function normalizeLidarrArtistIds(values) {
+  return [
+    ...new Set(
+      (Array.isArray(values) ? values : [])
+        .map(normalizeLidarrArtistId)
+        .filter(Boolean),
+    ),
+  ];
+}
+
 function isMetadataProviderIdError(error) {
   const message = String(error?.message || "").toLowerCase();
   return message.includes("input string") && message.includes("correct format");
@@ -1268,24 +1278,64 @@ export class LidarrClient {
     }
   }
 
-  async getAllTracks() {
+  async getAllTracks(options = {}) {
+    const { artistIds, throwOnError = false, ...requestOptions } = options;
     try {
-      const result = await this.request("/track");
-      if (Array.isArray(result)) return result;
-      if (result?.records && Array.isArray(result.records)) return result.records;
-      return [];
-    } catch {
+      const normalizedArtistIds = normalizeLidarrArtistIds(artistIds);
+      if (normalizedArtistIds.length === 0) {
+        throw new Error("Lidarr artist IDs are required for bulk track reads");
+      }
+      const results = await mapWithConcurrency(
+        normalizedArtistIds,
+        LIDARR_MAX_CONCURRENT,
+        async (artistId) => {
+          const result = await this.request(
+            `/track?artistId=${artistId}`,
+            "GET",
+            null,
+            false,
+            requestOptions,
+          );
+          if (Array.isArray(result)) return result;
+          if (result?.records && Array.isArray(result.records)) return result.records;
+          return [];
+        },
+        { stopOnError: true },
+      );
+      return results.flat();
+    } catch (error) {
+      if (throwOnError) throw error;
       return [];
     }
   }
 
-  async getAllTrackFiles() {
+  async getAllTrackFiles(options = {}) {
+    const { artistIds, throwOnError = false, ...requestOptions } = options;
     try {
-      const result = await this.request("/trackfile");
-      if (Array.isArray(result)) return result;
-      if (result?.records && Array.isArray(result.records)) return result.records;
-      return [];
-    } catch {
+      const normalizedArtistIds = normalizeLidarrArtistIds(artistIds);
+      if (normalizedArtistIds.length === 0) {
+        throw new Error("Lidarr artist IDs are required for bulk track-file reads");
+      }
+      const results = await mapWithConcurrency(
+        normalizedArtistIds,
+        LIDARR_MAX_CONCURRENT,
+        async (artistId) => {
+          const result = await this.request(
+            `/trackfile?artistId=${artistId}`,
+            "GET",
+            null,
+            false,
+            requestOptions,
+          );
+          if (Array.isArray(result)) return result;
+          if (result?.records && Array.isArray(result.records)) return result.records;
+          return [];
+        },
+        { stopOnError: true },
+      );
+      return results.flat();
+    } catch (error) {
+      if (throwOnError) throw error;
       return [];
     }
   }

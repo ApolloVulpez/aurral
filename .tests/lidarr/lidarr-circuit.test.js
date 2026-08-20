@@ -22,6 +22,90 @@ test("isCircuitOpen returns stale GET cache instead of throwing", async () => {
   assert.equal(artists[0].artistName, "Test");
 });
 
+test("bulk track reads use Lidarr artist selectors", async (t) => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    requests.push(request.url);
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify([{ id: 1, albumId: 2 }]));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  });
+
+  const address = server.address();
+  const client = new LidarrClient();
+  client._holdConfig = true;
+  client.config = {
+    url: `http://127.0.0.1:${address.port}`,
+    apiKey: "test",
+    timeoutMs: 2000,
+    circuitDisabled: true,
+  };
+
+  await client.getAllTracks({ artistIds: [7, 8], throwOnError: true });
+  await client.getAllTrackFiles({ artistIds: [7, 8], throwOnError: true });
+
+  assert.deepEqual(requests.sort(), [
+    "/api/v1/track?artistId=7",
+    "/api/v1/track?artistId=8",
+    "/api/v1/trackfile?artistId=7",
+    "/api/v1/trackfile?artistId=8",
+  ]);
+  client._httpAgent.destroy();
+  client._httpsAgent.destroy();
+  client._httpsInsecureAgent.destroy();
+});
+
+test("bulk reads wait for active requests before failing", async () => {
+  const client = new LidarrClient();
+  const artistIds = Array.from({ length: 14 }, (_, index) => index + 1);
+  const started = [];
+  let releaseFailure;
+  let releasePending;
+  let resolveInitialRequests;
+  const failure = new Promise((resolve) => {
+    releaseFailure = resolve;
+  });
+  const pending = new Promise((resolve) => {
+    releasePending = resolve;
+  });
+  const initialRequests = new Promise((resolve) => {
+    resolveInitialRequests = resolve;
+  });
+
+  client.request = async (endpoint) => {
+    const artistId = Number(new URL(`http://localhost${endpoint}`).searchParams.get("artistId"));
+    started.push(artistId);
+    if (started.length === 12) resolveInitialRequests();
+    if (artistId === 1) {
+      await failure;
+      throw new Error("bulk track read failed");
+    }
+    if (artistId <= 12) await pending;
+    return [];
+  };
+
+  const read = client.getAllTracks({ artistIds, throwOnError: true });
+  await initialRequests;
+  releaseFailure();
+
+  let settled = false;
+  const rejection = read.catch((error) => {
+    settled = true;
+    throw error;
+  });
+  await delay(10);
+  assert.equal(settled, false);
+
+  releasePending();
+  await assert.rejects(rejection, /bulk track read failed/);
+  await delay(0);
+  assert.deepEqual(started, artistIds.slice(0, 12));
+});
+
 test("testConnection preserves Lidarr HTTP diagnostics", async (t) => {
   let status = 401;
   const server = http.createServer((_request, response) => {
