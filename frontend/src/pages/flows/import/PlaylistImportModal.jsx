@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileJson, Loader2, Music2, Upload } from "lucide-react";
 import { ModalShell } from "../../../components/PlaylistModals";
 import {
@@ -23,6 +23,7 @@ const SYNC_INTERVAL_OPTIONS = [
 ];
 
 const SPOTIFY_OAUTH_BROADCAST_CHANNEL = "aurral-spotify-oauth";
+const SPOTIFY_AUTH_REQUIRED_CODE = "SPOTIFY_AUTH_REQUIRED";
 
 function tokensFromHandoffPayload(payload) {
   const accessToken = String(payload?.access_token || "").trim();
@@ -127,6 +128,8 @@ export function PlaylistImportModal({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [jsonReview, setJsonReview] = useState(null);
+  const sourceRef = useRef(source);
+  const sourceRequestIdRef = useRef(0);
 
   const reservedNameKeys = useMemo(
     () =>
@@ -137,6 +140,8 @@ export function PlaylistImportModal({
   );
 
   const resetState = useCallback(() => {
+    sourceRef.current = "spotify";
+    sourceRequestIdRef.current += 1;
     setSource("spotify");
     setPlaylists([]);
     setPlaylistQuery("");
@@ -149,6 +154,14 @@ export function PlaylistImportModal({
     setPreviewSkipped(0);
     setJsonReview(null);
   }, []);
+
+  const handleSpotifyAuthRequired = useCallback((error, requestId) => {
+    if (error?.response?.data?.code !== SPOTIFY_AUTH_REQUIRED_CODE) return false;
+    if (sourceRef.current !== "spotify" || requestId !== sourceRequestIdRef.current) return false;
+    setSpotifyStatus({ connected: false, displayName: null, connectedAt: null });
+    resetState();
+    return true;
+  }, [resetState]);
 
   useEffect(() => {
     if (!open) {
@@ -170,6 +183,7 @@ export function PlaylistImportModal({
   }, [open, resetState]);
 
   const loadSpotifyPlaylists = useCallback(async () => {
+    const requestId = sourceRequestIdRef.current;
     setSpotifyLoading(true);
     try {
       const payload = await getSpotifyPlaylists();
@@ -178,11 +192,12 @@ export function PlaylistImportModal({
         setSpotifyStatus((prev) => ({ ...prev, connected: true, displayName: payload.user }));
       }
     } catch (error) {
+      handleSpotifyAuthRequired(error, requestId);
       showError?.(error?.response?.data?.message || error?.message || "Failed to load Spotify playlists");
     } finally {
       setSpotifyLoading(false);
     }
-  }, [showError]);
+  }, [handleSpotifyAuthRequired, showError]);
 
   useEffect(() => {
     if (!open || source !== "spotify" || !spotifyStatus.connected) return;
@@ -197,6 +212,7 @@ export function PlaylistImportModal({
       return;
     }
     let cancelled = false;
+    const requestId = sourceRequestIdRef.current;
     setPreviewLoading(true);
     (async () => {
       try {
@@ -207,6 +223,7 @@ export function PlaylistImportModal({
         setPreviewTracks(Array.isArray(payload?.previewTracks) ? payload.previewTracks : []);
       } catch (error) {
         if (!cancelled) {
+          handleSpotifyAuthRequired(error, requestId);
           showError?.(error?.response?.data?.message || error?.message || "Failed to preview playlist");
         }
       } finally {
@@ -216,7 +233,7 @@ export function PlaylistImportModal({
     return () => {
       cancelled = true;
     };
-  }, [selectedPlaylist, showError]);
+  }, [handleSpotifyAuthRequired, selectedPlaylist, showError]);
 
   const filteredPlaylists = useMemo(() => {
     const query = playlistQuery.trim().toLowerCase();
@@ -225,6 +242,7 @@ export function PlaylistImportModal({
   }, [playlistQuery, playlists]);
 
   const handleConnectSpotify = async () => {
+    const requestId = sourceRequestIdRef.current;
     setSpotifyLoading(true);
     try {
       const { oauthUrl } = await startSpotifyOAuth(getOAuthCallbackUrl());
@@ -237,6 +255,7 @@ export function PlaylistImportModal({
       });
       await loadSpotifyPlaylists();
     } catch (error) {
+      handleSpotifyAuthRequired(error, requestId);
       showError?.(
         error?.response?.data?.message || error?.message || "Failed to connect Spotify",
       );
@@ -290,6 +309,7 @@ export function PlaylistImportModal({
     }
     const reservedNames = new Set(reservedNameKeys);
     const finalName = reserveUniqueFlowName(reservedNames, baseName);
+    const requestId = sourceRequestIdRef.current;
     setImporting(true);
     try {
       await importSpotifyPlaylist({
@@ -304,6 +324,7 @@ export function PlaylistImportModal({
       onImported?.();
       onClose?.();
     } catch (error) {
+      handleSpotifyAuthRequired(error, requestId);
       showError?.(
         error?.response?.data?.message ||
           error?.response?.data?.error ||
@@ -422,7 +443,11 @@ export function PlaylistImportModal({
               key={option.id}
               type="button"
               className={`artist-segmented-button${source === option.id ? " is-active" : ""}`}
-              onClick={() => setSource(option.id)}
+              onClick={() => {
+                sourceRef.current = option.id;
+                sourceRequestIdRef.current += 1;
+                setSource(option.id);
+              }}
               disabled={importing}
             >
               {option.label}
