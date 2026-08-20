@@ -432,9 +432,11 @@ function scoreVariantCompatibility(expectedTitle, actualTitle) {
       score -= 95;
       hardMismatch = true;
     }
-  } else if (expected.mixVariant || actual.mixVariant) {
+  } else if (actual.mixVariant) {
     score -= 95;
     hardMismatch = true;
+  } else if (expected.mixVariant) {
+    score -= 25;
   }
 
   if (expected.monoStereo && actual.monoStereo) {
@@ -451,6 +453,22 @@ function scoreVariantCompatibility(expectedTitle, actualTitle) {
     score,
     hardMismatch,
   };
+}
+
+function mergeVariantMatches(primary, secondary) {
+  if (!secondary) return primary;
+  return {
+    score: Math.max(primary.score, secondary.score),
+    hardMismatch: primary.hardMismatch || secondary.hardMismatch,
+  };
+}
+
+function scoreRequestedTitle(value, context) {
+  const trackName = String(context?.trackName || "");
+  const direct = scoreTextMatch(value, trackName);
+  const stripped = stripVersionSuffix(trackName);
+  if (!stripped || stripped.toLowerCase() === trackName.toLowerCase()) return direct;
+  return Math.max(direct, scoreTextMatch(value, stripped));
 }
 
 function extractTrackNumber(value) {
@@ -896,9 +914,9 @@ function buildGroupCandidate(group, context, options = {}) {
     const fileNameParts = readFileNameArtistTitle(context, String(item?.file || ""));
     const artistScore = Math.max(folderArtistScore, fileNameParts?.artistScore || 0);
     const titleScore = Math.max(
-      scoreTextMatch(baseName, context?.trackName),
-      scoreTextMatch(getFileName(String(item?.file || "")), context?.trackName),
-      fileNameParts ? scoreTextMatch(fileNameParts.title, context?.trackName) : 0,
+      scoreRequestedTitle(baseName, context),
+      scoreRequestedTitle(getFileName(String(item?.file || "")), context),
+      fileNameParts ? scoreRequestedTitle(fileNameParts.title, context) : 0,
     );
     const variantMatch = scoreVariantCompatibility(context?.trackName, baseName);
     const variantScore = variantMatch.score;
@@ -1136,9 +1154,9 @@ export async function validateDownloadedTrack(filePath, candidate, context) {
   const albumFromTags = metadata?.album || "";
   const albumName = readComparableAlbumName(context);
   const titleScore = Math.max(
-    scoreTextMatch(titleFromTags, context?.trackName),
-    scoreTextMatch(remoteBaseName, context?.trackName),
-    scoreTextMatch(stripLeadingTrackNumber(remoteBaseName), context?.trackName),
+    scoreRequestedTitle(titleFromTags, context),
+    scoreRequestedTitle(remoteBaseName, context),
+    scoreRequestedTitle(stripLeadingTrackNumber(remoteBaseName), context),
   );
   const artistScore = Math.max(
     0,
@@ -1150,7 +1168,10 @@ export async function validateDownloadedTrack(filePath, candidate, context) {
     : 0;
   const yearScore = scoreYearMatch(remoteFilename, context?.releaseYear);
   const yearMismatch = hasConflictingYear(remoteFilename, context?.releaseYear);
-  const variantMatch = scoreVariantCompatibility(context?.trackName, remoteBaseName);
+  const variantMatch = mergeVariantMatches(
+    scoreVariantCompatibility(context?.trackName, remoteBaseName),
+    titleFromTags ? scoreVariantCompatibility(context?.trackName, titleFromTags) : null,
+  );
   const filenameTrackNumber = extractTrackNumber(remoteBaseName);
   const actualTrackNumber =
     filenameTrackNumber != null
