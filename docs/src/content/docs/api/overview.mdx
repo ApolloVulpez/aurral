@@ -6,6 +6,10 @@ description: This page explains Aurral authentication and HTTP API use for scrip
 Aurral provides a JSON HTTP API. The web interface uses this API. You can also
 use the API for scripts, dashboards, and homepage widgets.
 
+The JSON API and the authenticated Subsonic API are separate interfaces. Use
+the JSON API for Aurral-specific automation. Use `/rest` for a Subsonic player
+or client.
+
 :::caution
 The API does not have version numbers. Routes and response formats can change
 between Aurral releases. Use the same Aurral version for each integration. If
@@ -52,6 +56,8 @@ same-origin proxy keeps it out of visitors' browsers.
 | `GET /api/health` | Aurral, library, discovery, and system status | None |
 | `GET /api/library/artists` | Library artists | `limit` (1-10000), `offset` |
 | `GET /api/library/artists/:mbid` | One library artist | MusicBrainz artist ID in the path |
+| `GET /api/library/canonical` | Canonical artists, albums, and tracks | Optional `source` and `availableOnly`. Add `kind` to use `page`, `pageSize`, `query`, `genre`, `sort`, `direction`, `artistId`, or `albumId` filters. |
+| `GET /api/library/favorites` | Current user's favorites and library | None |
 | `GET /api/library/albums` | Albums for an artist | Required `artistId` |
 | `GET /api/library/albums/:id` | One library album | Lidarr album ID in the path |
 | `GET /api/library/tracks` | Tracks for an album | `albumId` or `releaseGroupMbid` |
@@ -60,6 +66,10 @@ same-origin proxy keeps it out of visitors' browsers.
 | `GET /api/requests` | Current artist and album requests | Optional `refresh=true` |
 | `GET /api/library/downloads/status/all` | All current download states | None |
 | `GET /api/search` | Search artists, albums, or tags | Required `q`. Optional `scope`, `limit`, and `offset` |
+
+`GET /api/library/canonical` returns the unpaged canonical library unless you
+provide `kind=artists`, `kind=albums`, or `kind=tracks`. The page filters apply
+only when `kind` is present.
 
 See the [endpoint reference](/api/endpoints/) for the complete current route
 index.
@@ -103,4 +113,5 @@ the key.
 
 The API key gives access to administration routes and routes that change data.
 Before you give the key to a third-party integration, read the endpoint
-reference.
+reference. The API key is not a Subsonic credential; Subsonic clients use the
+account password or token authentication described in the integration guide.
