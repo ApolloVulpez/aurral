@@ -30,6 +30,8 @@ export class NavidromeClient {
     this.url = url ? url.replace(/\/+$/, "") : null;
     this.user = user;
     this.password = password;
+    this._libraryPaths = [];
+    this._nativeTokenPromise = null;
     this._indexedSongsPromise = null;
   }
 
@@ -98,14 +100,23 @@ export class NavidromeClient {
   }
 
   async findSong(_title, _artist, track = {}) {
-    const normalizedPath = String(track.path || "").replace(/\\/g, "/").toLowerCase();
+    const normalizedPath = normalizeLibraryPath(track.path).toLowerCase();
+    const relativePaths = this._libraryPaths
+      .map((libraryPath) => normalizeLibraryPath(libraryPath).toLowerCase())
+      .filter((libraryPath) => normalizedPath.startsWith(`${libraryPath}/`))
+      .map((libraryPath) => normalizedPath.slice(libraryPath.length + 1));
     const indexedSongs = await this._getIndexedSongs();
-    const matchesPath = (song) => {
-      const songPath = String(song.path || "").replace(/\\/g, "/").toLowerCase();
-      return songPath && normalizedPath === songPath;
-    };
-    const pathMatch = normalizedPath ? indexedSongs.find(matchesPath) : null;
-    if (pathMatch) return pathMatch;
+    const normalizeSongPath = (song) => normalizeLibraryPath(song.path).toLowerCase();
+    const exactPathMatch = normalizedPath
+      ? indexedSongs.find((song) => normalizeSongPath(song) === normalizedPath)
+      : null;
+    if (exactPathMatch) return exactPathMatch;
+
+    const relativeMatches = indexedSongs.filter((song) => {
+      const songPath = normalizeSongPath(song);
+      return songPath && relativePaths.includes(songPath);
+    });
+    if (relativeMatches.length === 1) return relativeMatches[0];
 
     const mbid = String(track.mbid || "").trim().toLowerCase();
     if (!mbid) return null;
@@ -235,37 +246,87 @@ export class NavidromeClient {
 
   async _nativeLogin() {
     if (!this.isConfigured()) throw new Error("Navidrome not configured");
-    const { data } = await axios.post(
-      `${this.url}/auth/login`,
-      { username: this.user, password: this.password },
-      { headers: { "Content-Type": "application/json" } },
-    );
-    const token = data.token || data.Token;
-    if (!token) throw new Error("No token in login response");
-    return token;
+    if (!this._nativeTokenPromise) {
+      this._nativeTokenPromise = axios.post(
+        `${this.url}/auth/login`,
+        { username: this.user, password: this.password },
+        { headers: { "Content-Type": "application/json" } },
+      ).then(({ data }) => {
+        const token = data.token || data.Token;
+        if (!token) throw new Error("No token in login response");
+        return token;
+      }).catch((error) => {
+        this._nativeTokenPromise = null;
+        throw error;
+      });
+    }
+    return this._nativeTokenPromise;
   }
 
   async _nativeRequest(method, path, body = null) {
-    let token = await this._nativeLogin();
     const base = this.url;
     const url = path.startsWith("/") ? `${base}${path}` : `${base}/api/${path}`;
-    const headers = {
-      "Content-Type": "application/json",
-      "X-ND-Authorization": `Bearer ${token}`,
-    };
-    let response;
-    if (method === "GET") {
-      response = await axios.get(url, { headers });
-    } else if (method === "POST") {
-      response = await axios.post(url, body, { headers });
-    } else if (method === "PUT") {
-      response = await axios.put(url, body, { headers });
-    } else {
-      throw new Error(`Unsupported method: ${method}`);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let tokenPromise = this._nativeTokenPromise;
+      if (!tokenPromise) {
+        const token = await this._nativeLogin();
+        tokenPromise = this._nativeTokenPromise || Promise.resolve(token);
+      }
+      const token = await tokenPromise;
+      const headers = {
+        "Content-Type": "application/json",
+        "X-ND-Authorization": `Bearer ${token}`,
+      };
+      try {
+        let response;
+        if (method === "GET") {
+          response = await axios.get(url, { headers });
+        } else if (method === "POST") {
+          response = await axios.post(url, body, { headers });
+        } else if (method === "PUT") {
+          response = await axios.put(url, body, { headers });
+        } else {
+          throw new Error(`Unsupported method: ${method}`);
+        }
+        const newToken = response.headers["x-nd-authorization"];
+        if (newToken) this._nativeTokenPromise = Promise.resolve(newToken);
+        return response.data;
+      } catch (error) {
+        if (error?.response?.status !== 401 || attempt > 0) throw error;
+        if (this._nativeTokenPromise === tokenPromise) this._nativeTokenPromise = null;
+      }
     }
-    const newToken = response.headers["x-nd-authorization"];
-    if (newToken) token = newToken;
-    return response.data;
+  }
+
+  async _requestPlaylistArtwork(method, playlistId, data, filename, contentType) {
+    const url = `${this.url}/api/playlist/${encodeURIComponent(playlistId)}/image`;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let tokenPromise = this._nativeTokenPromise;
+      if (!tokenPromise) {
+        const token = await this._nativeLogin();
+        tokenPromise = this._nativeTokenPromise || Promise.resolve(token);
+      }
+      const token = await tokenPromise;
+      const options = {
+        method,
+        headers: { "X-ND-Authorization": `Bearer ${token}` },
+      };
+      if (method === "POST") {
+        const form = new FormData();
+        form.append("image", new Blob([data], { type: contentType }), filename);
+        options.body = form;
+      }
+      const response = await fetch(url, options);
+      if (response.status === 401 && attempt === 0) {
+        if (this._nativeTokenPromise === tokenPromise) this._nativeTokenPromise = null;
+        continue;
+      }
+      if (!response.ok) {
+        const action = method === "POST" ? "upload" : "deletion";
+        throw new Error(`Playlist artwork ${action} failed with status ${response.status}`);
+      }
+      return;
+    }
   }
 
   async _getIndexedSongs() {
@@ -293,34 +354,17 @@ export class NavidromeClient {
   }
 
   async uploadPlaylistArtwork(playlistId, data, filename = "cover.webp", contentType = "image/webp") {
-    const token = await this._nativeLogin();
-    const form = new FormData();
-    form.append("image", new Blob([data], { type: contentType }), filename);
-    const response = await fetch(
-      `${this.url}/api/playlist/${encodeURIComponent(playlistId)}/image`,
-      {
-        method: "POST",
-        headers: { "X-ND-Authorization": `Bearer ${token}` },
-        body: form,
-      },
+    return this._requestPlaylistArtwork(
+      "POST",
+      playlistId,
+      data,
+      filename,
+      contentType,
     );
-    if (!response.ok) {
-      throw new Error(`Playlist artwork upload failed with status ${response.status}`);
-    }
   }
 
   async deletePlaylistArtwork(playlistId) {
-    const token = await this._nativeLogin();
-    const response = await fetch(
-      `${this.url}/api/playlist/${encodeURIComponent(playlistId)}/image`,
-      {
-        method: "DELETE",
-        headers: { "X-ND-Authorization": `Bearer ${token}` },
-      },
-    );
-    if (!response.ok) {
-      throw new Error(`Playlist artwork deletion failed with status ${response.status}`);
-    }
+    return this._requestPlaylistArtwork("DELETE", playlistId);
   }
 
   async getLibraries() {
@@ -350,9 +394,14 @@ export class NavidromeClient {
     if (!this.isConfigured()) return null;
     const name = PLAYLIST_LIBRARY_NAME;
     const normalizedPath = normalizeLibraryPath(libraryPath);
+    this._libraryPaths = [normalizedPath];
     try {
       const libs = await this.getLibraries();
       const list = Array.isArray(libs) ? libs : [];
+      this._libraryPaths = [...new Set([
+        normalizedPath,
+        ...list.map((lib) => normalizeLibraryPath(lib.path)).filter(Boolean),
+      ])];
       const byPath = list.find((lib) => normalizeLibraryPath(lib.path) === normalizedPath);
       if (byPath) {
         if (byPath.name !== name) {

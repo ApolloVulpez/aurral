@@ -307,7 +307,7 @@ test("creates an empty API playlist without waiting for a scan", async () => {
   assert.deepEqual(client.calls.created, [{ name: "Empty", songIds: [] }]);
 });
 
-test("clears an existing API playlist while a new run has no indexed tracks", async () => {
+test("preserves an existing API playlist while a new run has no indexed tracks", async () => {
   const playlist = flowPlaylistConfig.createSharedPlaylist({ name: "Refreshing" });
   const client = createClient({
     playlists: [{ id: "saved-id", name: "Refreshing" }],
@@ -322,13 +322,11 @@ test("clears an existing API playlist while a new run has no indexed tracks", as
     createPlaybackPlaylistSnapshot({
       entityId: playlist.id,
       displayName: playlist.name,
-      tracks: [],
+      tracks: [{ path: "/music/song.flac", title: "Song", artist: "Artist" }],
     }),
   );
 
-  assert.deepEqual(client.calls.updated, [
-    { id: "saved-id", name: "Refreshing", songIds: [] },
-  ]);
+  assert.deepEqual(client.calls.updated, []);
   assert.deepEqual(client.calls.created, []);
 });
 
@@ -519,7 +517,7 @@ test("replaces a pointer whose imported source belongs to another entity", async
   assert.equal(navidromePlaylistPointerStore.getPointer(original.id, "global"), null);
 });
 
-test("clears a stored playlist during rename cleanup until tracks resolve", async () => {
+test("preserves a stored playlist during rename cleanup until tracks resolve", async () => {
   const playlist = flowPlaylistConfig.createSharedPlaylist({ name: "Renamed" });
   const client = createClient({
     playlists: [{ id: "imported-id", name: "Legacy Rename Fixture" }],
@@ -551,7 +549,6 @@ test("clears a stored playlist during rename cleanup until tracks resolve", asyn
   await destination.publishPlaylist(snapshot);
 
   assert.deepEqual(client.calls.updated, [
-    { id: "imported-id", name: "Renamed", songIds: [] },
     { id: "imported-id", name: "Renamed", songIds: ["song-1"] },
   ]);
   assert.equal(
@@ -560,7 +557,7 @@ test("clears a stored playlist during rename cleanup until tracks resolve", asyn
   );
 });
 
-test("clears an unclaimed imported playlist during rename cleanup until tracks resolve", async () => {
+test("preserves an unclaimed imported playlist during rename cleanup until tracks resolve", async () => {
   const playlist = flowPlaylistConfig.createSharedPlaylist({ name: "Renamed without pointer" });
   const client = createClient({
     playlists: [{ id: "unclaimed-id", name: "Legacy Unclaimed Fixture" }],
@@ -584,7 +581,6 @@ test("clears an unclaimed imported playlist during rename cleanup until tracks r
   await destination.publishPlaylist(snapshot);
 
   assert.deepEqual(client.calls.updated, [
-    { id: "unclaimed-id", name: "Renamed without pointer", songIds: [] },
     { id: "unclaimed-id", name: "Renamed without pointer", songIds: ["song-1"] },
   ]);
   assert.equal(
@@ -593,7 +589,7 @@ test("clears an unclaimed imported playlist during rename cleanup until tracks r
   );
 });
 
-test("renames and clears an imported playlist before unresolved tracks are ready", async () => {
+test("renames but preserves an imported playlist before unresolved tracks are ready", async () => {
   const playlist = flowPlaylistConfig.createSharedPlaylist({ name: "Renamed immediately" });
   const client = createClient({
     playlists: [{ id: "rename-first-id", name: "Legacy Rename First" }],
@@ -616,9 +612,7 @@ test("renames and clears an imported playlist before unresolved tracks are ready
   assert.deepEqual(client.calls.renamed, [
     { id: "rename-first-id", name: "Renamed immediately" },
   ]);
-  assert.deepEqual(client.calls.updated, [
-    { id: "rename-first-id", name: "Renamed immediately", songIds: [] },
-  ]);
+  assert.deepEqual(client.calls.updated, []);
   assert.equal(
     navidromePlaylistPointerStore.getPointer(playlist.id, "global").playlistId,
     "rename-first-id",
@@ -708,20 +702,92 @@ test("publishes resolved songs and catches up when Navidrome indexes the rest", 
       { path: "/music/missing.flac", title: "Missing", artist: "Artist" },
     ],
   });
+  const scheduleCatchup = destination._scheduleCatchup.bind(destination);
+  let scheduleCalls = 0;
+  destination._scheduleCatchup = () => {
+    scheduleCalls += 1;
+  };
 
   await destination.publishPlaylist(snapshot);
   await assert.rejects(fs.access(path.join(destination.libraryRoot, "Catch-up.m3u")));
+  assert.equal(scheduleCalls, 1);
   assert.deepEqual(client.calls.created, [
     { name: "Catch-up", songIds: ["ready-song"] },
   ]);
   songs.Missing = { id: "missing-song" };
-  destination._scheduleCatchup([0]);
+  scheduleCatchup([0]);
   while (destination._catchupRunning) await new Promise((resolve) => setTimeout(resolve, 1));
 
   assert.deepEqual(client.calls.updated, [
     { id: "created", name: "Catch-up", songIds: ["ready-song", "missing-song"] },
   ]);
   await assert.rejects(fs.access(path.join(destination.libraryRoot, "Catch-up.m3u")));
+});
+
+test("serializes playlist deletion behind an in-flight catch-up", async () => {
+  const playlist = flowPlaylistConfig.createSharedPlaylist({ name: "Delete during catch-up" });
+  const songs = { Ready: { id: "ready-song" } };
+  const client = createClient({ songs });
+  const events = [];
+  const updatePlaylist = client.updatePlaylist.bind(client);
+  const deletePlaylist = client.deletePlaylist.bind(client);
+  client.updatePlaylist = async (...args) => {
+    events.push("update");
+    return updatePlaylist(...args);
+  };
+  client.deletePlaylist = async (...args) => {
+    events.push("delete");
+    return deletePlaylist(...args);
+  };
+  let releaseLookup;
+  const lookupGate = new Promise((resolve) => {
+    releaseLookup = resolve;
+  });
+  let lookupStartedResolve;
+  const lookupStarted = new Promise((resolve) => {
+    lookupStartedResolve = resolve;
+  });
+  let lookupStartedDone = false;
+  lookupStarted.then(() => {
+    lookupStartedDone = true;
+  });
+  let blockMissing = false;
+  client.findSong = async (title) => {
+    if (title === "Missing" && blockMissing) {
+      blockMissing = false;
+      lookupStartedResolve();
+      await lookupGate;
+    }
+    return songs[title] || null;
+  };
+  const destination = new NavidromePlaybackDestination(weeklyFlowRoot, { client });
+  const scheduleCatchup = destination._scheduleCatchup.bind(destination);
+  destination._scheduleCatchup = () => {};
+  const snapshot = createPlaybackPlaylistSnapshot({
+    entityId: playlist.id,
+    displayName: playlist.name,
+    tracks: [
+      { path: "/music/ready.flac", title: "Ready", artist: "Artist" },
+      { path: "/music/missing.flac", title: "Missing", artist: "Artist" },
+    ],
+  });
+
+  await destination.publishPlaylist(snapshot);
+  destination._scheduleCatchup = scheduleCatchup;
+  songs.Missing = { id: "missing-song" };
+  blockMissing = true;
+  scheduleCatchup([0]);
+  while (!lookupStartedDone) await new Promise((resolve) => setTimeout(resolve, 1));
+
+  const deletePromise = destination.deletePlaylist(snapshot);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(events, []);
+  releaseLookup();
+
+  assert.deepEqual(await deletePromise, { ok: true });
+  while (destination._catchupRunning) await new Promise((resolve) => setTimeout(resolve, 1));
+  assert.deepEqual(events, ["update", "delete"]);
+  assert.equal(navidromePlaylistPointerStore.getPointer(playlist.id, "global"), null);
 });
 
 test("updates a stored playlist ID without relying on the playlist list", async () => {

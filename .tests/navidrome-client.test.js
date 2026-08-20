@@ -255,6 +255,51 @@ test("uses an indexed path without metadata matching", async () => {
   assert.equal(song.id, "path-match");
 });
 
+test("matches Navidrome-relative paths under the configured library root", async () => {
+  const client = new NavidromeClient("http://navidrome.test", "user", "password");
+  client._nativeRequest = async () => [
+    { id: "music-library", name: "Music Library", path: "/data/music" },
+    { id: "aurral-song", name: "Aurral Playlists", path: "/data/downloads/aurral" },
+  ];
+  await client.ensureWeeklyFlowLibrary("/data/downloads/aurral");
+  client._getIndexedSongs = async () => [{
+    id: "relative-match",
+    path: "The Rapture/Echoes/Echoes.flac",
+  }, {
+    id: "music-relative-match",
+    path: "Black Lips/Good Bad Not Evil/Black Lips_Good Bad Not Evil_08_Bad Kids.flac",
+  }];
+
+  const song = await client.findSong("Echoes", "The Rapture", {
+    path: "/data/downloads/aurral/The Rapture/Echoes/Echoes.flac",
+  });
+
+  assert.equal(song.id, "relative-match");
+  const musicSong = await client.findSong("Bad Kids", "Black Lips", {
+    path: "/data/music/Black Lips/Good Bad Not Evil/Black Lips_Good Bad Not Evil_08_Bad Kids.flac",
+  });
+
+  assert.equal(musicSong.id, "music-relative-match");
+});
+
+test("prefers an exact absolute path over an earlier relative match", async () => {
+  const client = new NavidromeClient("http://navidrome.test", "user", "password");
+  client._libraryPaths = ["/data/music"];
+  client._getIndexedSongs = async () => [{
+    id: "relative-match",
+    path: "Artist/Album/track.flac",
+  }, {
+    id: "exact-match",
+    path: "/data/music/Artist/Album/track.flac",
+  }];
+
+  const song = await client.findSong("Track", "Artist", {
+    path: "/data/music/Artist/Album/track.flac",
+  });
+
+  assert.equal(song.id, "exact-match");
+});
+
 test("does not match a path suffix from another library", async () => {
   const client = new NavidromeClient("http://navidrome.test", "user", "password");
   client._getIndexedSongs = async () => [{
@@ -307,6 +352,87 @@ test("loads the complete indexed song list in pages", async () => {
     "/api/song?_start=0&_end=1000",
     "/api/song?_start=1000&_end=2000",
   ]);
+});
+
+test("reuses one native login while paging the song index", async () => {
+  const originalFetch = globalThis.fetch;
+  let loginCount = 0;
+  globalThis.fetch = async (url) => {
+    const request = new URL(url);
+    if (request.pathname === "/auth/login") {
+      loginCount += 1;
+      return jsonResponse({ token: "native-token" });
+    }
+    const start = Number(request.searchParams.get("_start"));
+    return jsonResponse(start < 5_000
+      ? Array.from({ length: 1_000 }, (_, index) => ({ id: `song-${start + index}` }))
+      : [{ id: "last-song" }]);
+  };
+
+  let songs;
+  try {
+    songs = await new NavidromeClient("http://navidrome.test", "user", "password")
+      ._getIndexedSongs();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(songs.length, 5_001);
+  assert.equal(loginCount, 1);
+});
+
+test("refreshes a cached native token after a 401", async () => {
+  const originalFetch = globalThis.fetch;
+  let loginCount = 0;
+  let requestCount = 0;
+  globalThis.fetch = async (url, options = {}) => {
+    const request = new URL(url);
+    if (request.pathname === "/auth/login") {
+      loginCount += 1;
+      return jsonResponse({ token: loginCount === 1 ? "stale-token" : "fresh-token" });
+    }
+    requestCount += 1;
+    if (requestCount === 1) return new Response(null, { status: 401 });
+    assert.equal(options.headers["X-ND-Authorization"], "Bearer fresh-token");
+    return jsonResponse({ ok: true });
+  };
+
+  try {
+    const client = new NavidromeClient("http://navidrome.test", "user", "password");
+    assert.deepEqual(await client._nativeRequest("GET", "/api/library"), { ok: true });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(loginCount, 2);
+  assert.equal(requestCount, 2);
+});
+
+test("refreshes a cached native token after a 401 during artwork upload", async () => {
+  const originalFetch = globalThis.fetch;
+  let loginCount = 0;
+  let artworkAttempts = 0;
+  globalThis.fetch = async (url, options = {}) => {
+    const request = new URL(url);
+    if (request.pathname === "/auth/login") {
+      loginCount += 1;
+      return jsonResponse({ token: loginCount === 1 ? "stale-token" : "fresh-token" });
+    }
+    artworkAttempts += 1;
+    if (artworkAttempts === 1) return new Response(null, { status: 401 });
+    assert.equal(options.headers["X-ND-Authorization"], "Bearer fresh-token");
+    return new Response(null, { status: 204 });
+  };
+
+  try {
+    await new NavidromeClient("http://navidrome.test", "user", "password")
+      .uploadPlaylistArtwork("playlist-1", Buffer.from("image"));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(loginCount, 2);
+  assert.equal(artworkAttempts, 2);
 });
 
 test("uploads playlist artwork through the native API", async () => {
