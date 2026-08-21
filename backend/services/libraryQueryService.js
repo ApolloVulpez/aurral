@@ -51,6 +51,7 @@ const CANONICAL_SELECT = `SELECT
   album_track.disc_number,
   album_track.track_number,
   media.id AS media_id,
+  media.album_id AS media_album_id,
   media.source AS media_source,
   media.path AS media_path,
   media.format AS media_format,
@@ -138,6 +139,7 @@ function buildLibraryFromRows(rows) {
 
       const file = {
         id: row.media_id,
+        albumId: row.media_album_id,
         source: row.media_source,
         path: row.media_path,
         format: row.media_format,
@@ -168,6 +170,166 @@ function buildLibraryFromRows(rows) {
     albums: [...albums.values()],
     tracks: [...tracks.values()],
   };
+}
+
+const normalizeLookupValues = (values) =>
+  [...new Set((Array.isArray(values) ? values : []).map((value) => String(value || "").trim()).filter(Boolean))];
+
+const canonicalOrder = `ORDER BY artist.sort_name COLLATE NOCASE, artist.name COLLATE NOCASE,
+  album.title COLLATE NOCASE, album_track.disc_number, album_track.track_number,
+  track.title COLLATE NOCASE, media.path COLLATE NOCASE`;
+
+function getScopedCanonicalLibrary({
+  source = null,
+  availableOnly = false,
+  conditions = [],
+  parameters = [],
+}) {
+  const sourceFilter = normalizeSource(source);
+  const where = [...conditions];
+  const values = [...parameters];
+  if (sourceFilter) {
+    where.push("media.source = ?");
+    values.push(sourceFilter);
+  }
+  if (availableOnly === true) where.push("media.available = 1");
+  const rows = db.prepare(
+    `${CANONICAL_SELECT}
+     ${CANONICAL_FROM}
+     WHERE ${where.join(" AND ")}
+     ${canonicalOrder}`,
+  ).iterate(...values);
+  return buildLibraryFromRows(rows);
+}
+
+export function getCanonicalArtistMbids({ source = null, availableOnly = false, mbids = [] } = {}) {
+  const references = normalizeLookupValues(mbids);
+  if (!references.length) return new Set();
+  const sourceFilter = normalizeSource(source);
+  const parameters = [...references];
+  const conditions = [`artist.mbid IN (${references.map(() => "?").join(",")})`];
+  if (sourceFilter) {
+    conditions.push("media.source = ?");
+    parameters.push(sourceFilter);
+  }
+  if (availableOnly === true) conditions.push("media.available = 1");
+  const rows = db.prepare(
+    `SELECT DISTINCT artist.mbid AS mbid
+     ${CANONICAL_FROM}
+     WHERE ${conditions.join(" AND ")}`,
+  ).all(...parameters);
+  return new Set(rows.map((row) => row.mbid).filter(Boolean));
+}
+
+export function getCanonicalTrackPath(albumReference, trackReference) {
+  const albumValue = String(albumReference ?? "").trim();
+  const trackValue = String(trackReference ?? "").trim();
+  if (!albumValue || !trackValue) return null;
+
+  const album = /^[1-9]\d*$/.test(albumValue)
+    ? db.prepare("SELECT id FROM library_albums WHERE id = ?").get(albumValue)
+    : db.prepare(
+      `SELECT id FROM library_albums
+       WHERE identity_key = ? OR mbid = ? OR release_group_mbid = ?
+       LIMIT 1`,
+    ).get(albumValue, albumValue, albumValue);
+  const track = /^[1-9]\d*$/.test(trackValue)
+    ? db.prepare("SELECT id FROM library_tracks WHERE id = ?").get(trackValue)
+    : db.prepare(
+      `SELECT id FROM library_tracks
+       WHERE identity_key = ? OR mbid = ?
+       LIMIT 1`,
+    ).get(trackValue, trackValue);
+  if (!album || !track) return null;
+
+  return db.prepare(
+    `SELECT media.path
+     FROM library_media_files AS media
+     JOIN library_album_tracks AS album_track
+       ON album_track.album_id = ? AND album_track.track_id = media.track_id
+     WHERE media.track_id = ?
+       AND media.available = 1
+       AND (media.album_id = ? OR media.album_id IS NULL)
+     ORDER BY media.album_id = ? DESC,
+              media.source = 'lidarr' DESC,
+              media.path COLLATE NOCASE
+     LIMIT 1`,
+  ).get(album.id, track.id, album.id, album.id)?.path || null;
+}
+
+export function getCanonicalLibraryForArtists({
+  source = null,
+  availableOnly = false,
+  mbids = [],
+} = {}) {
+  const references = normalizeLookupValues(mbids);
+  if (!references.length) return { artists: [], albums: [], tracks: [] };
+  return getScopedCanonicalLibrary({
+    source,
+    availableOnly,
+    conditions: [`artist.mbid IN (${references.map(() => "?").join(",")})`],
+    parameters: references,
+  });
+}
+
+export function getCanonicalLibraryForAlbumReferences({
+  source = null,
+  availableOnly = false,
+  references: requestedReferences = [],
+} = {}) {
+  const references = normalizeLookupValues(requestedReferences);
+  if (!references.length) return { artists: [], albums: [], tracks: [] };
+
+  const sourceFilter = normalizeSource(source);
+  const referenceCondition = `(
+    album.mbid IN (${references.map(() => "?").join(",")}) OR
+    album.release_group_mbid IN (${references.map(() => "?").join(",")}) OR
+    album.identity_key IN (${references.map(() => "?").join(",")})
+  )`;
+  const albumParameters = [];
+  const mediaConditions = [
+    "media.track_id = album_track.track_id",
+    albumMediaCondition("media", "album_track"),
+  ];
+  if (sourceFilter) {
+    mediaConditions.push("media.source = ?");
+    albumParameters.push(sourceFilter);
+  }
+  if (availableOnly === true) mediaConditions.push("media.available = 1");
+  albumParameters.push(...references, ...references, ...references);
+
+  const albumIds = db.prepare(
+    `SELECT DISTINCT album.id AS id
+     FROM library_albums AS album
+     JOIN library_album_tracks AS album_track ON album_track.album_id = album.id
+     JOIN library_media_files AS media ON ${mediaConditions.join(" AND ")}
+     WHERE ${referenceCondition}`,
+  ).all(...albumParameters).map((row) => row.id);
+  if (!albumIds.length) return { artists: [], albums: [], tracks: [] };
+
+  const trackMediaConditions = [
+    "media.track_id = album_track.track_id",
+    albumMediaCondition("media", "album_track"),
+  ];
+  const trackParameters = [];
+  if (sourceFilter) {
+    trackMediaConditions.push("media.source = ?");
+    trackParameters.push(sourceFilter);
+  }
+  if (availableOnly === true) trackMediaConditions.push("media.available = 1");
+  trackParameters.push(...albumIds);
+
+  const rows = db.prepare(
+    `${CANONICAL_SELECT}
+     FROM library_tracks AS track
+     JOIN library_album_tracks AS album_track ON album_track.track_id = track.id
+     JOIN library_albums AS album ON album.id = album_track.album_id
+     JOIN library_artists AS artist ON artist.id = album.artist_id
+     LEFT JOIN library_media_files AS media ON ${trackMediaConditions.join(" AND ")}
+     WHERE album.id IN (${albumIds.map(() => "?").join(",")})
+     ${canonicalOrder}`,
+  ).iterate(...trackParameters);
+  return buildLibraryFromRows(rows);
 }
 
 export function getCanonicalLibrary({ source = null, availableOnly = false, favoriteKeys = null } = {}) {

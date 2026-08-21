@@ -30,35 +30,55 @@ export function getScheduledLibraryScanJobId() {
   return normalizeJobId(getScanRegistry().jobId);
 }
 
+export function hasCompletedLibraryScan() {
+  return Boolean(
+    db
+      .prepare("SELECT 1 FROM library_scan_runs WHERE status = 'complete' LIMIT 1")
+      .get(),
+  );
+}
+
 export function clearScheduledLibraryScan(jobId = null) {
   const registry = getScanRegistry();
   if (!("jobId" in registry)) return;
   if (jobId != null && Number(registry.jobId) !== Number(jobId)) return;
   delete registry.jobId;
+  delete registry.includeLidarr;
   setScanRegistry(registry);
 }
 
-export function scheduleLibraryScan({ force = false } = {}) {
+export function scheduleLibraryScan({ force = false, includeLidarr = true } = {}) {
   const registry = getScanRegistry();
   const existingJobId = normalizeJobId(registry.jobId);
   if (existingJobId != null && hasLiveScanJob(existingJobId)) {
+    if (includeLidarr === true && registry.includeLidarr !== true) {
+      setScanRegistry({ jobId: existingJobId, includeLidarr: true });
+    }
     return existingJobId;
   }
   if (existingJobId != null) clearScheduledLibraryScan(existingJobId);
-  const jobId = enqueueLibraryScanJob({ force: force === true });
-  setScanRegistry({ jobId });
+  const jobId = enqueueLibraryScanJob({
+    force: force === true,
+    includeLidarr: includeLidarr === true,
+  });
+  setScanRegistry({ jobId, includeLidarr: includeLidarr === true });
   return jobId;
 }
 
 export function claimScheduledLibraryScanJob(jobId) {
   const normalizedJobId = normalizeJobId(jobId);
   if (normalizedJobId == null) return false;
+  const registry = getScanRegistry();
   const scheduledJobId = getScheduledLibraryScanJobId();
   if (scheduledJobId != null && scheduledJobId !== normalizedJobId) {
     if (hasLiveScanJob(scheduledJobId)) return false;
     clearScheduledLibraryScan(scheduledJobId);
   }
-  setScanRegistry({ jobId: normalizedJobId });
+  setScanRegistry({
+    jobId: normalizedJobId,
+    includeLidarr:
+      Number(registry.jobId) === normalizedJobId && registry.includeLidarr === true,
+  });
   return true;
 }
 
@@ -114,10 +134,14 @@ const {
   filterJob(job) {
     return claimScheduledLibraryScanJob(job.id);
   },
-  processJob: async () => {
+  processJob: async (payload, job) => {
     const { lidarrClient } = await import("./lidarrClient.js");
     const { scanConfiguredLibrary } = await import("./libraryIndexService.js");
-    await scanConfiguredLibrary({ lidarrClient });
+    const registry = getScanRegistry();
+    const includeLidarr =
+      payload?.includeLidarr === true ||
+      (Number(registry.jobId) === Number(job.id) && registry.includeLidarr === true);
+    await scanConfiguredLibrary({ lidarrClient, includeLidarr });
     const { playlistManager } = await import("./weeklyFlow/weeklyFlowPlaylistManager.js");
     await playlistManager.scanLibrary();
     websocketService.broadcast("library", { type: "library_scan_completed" });
@@ -127,7 +151,10 @@ const {
     if (job.attempts >= 3) {
       return { action: "fail", message };
     }
-    setScanRegistry({ jobId: job.id });
+    setScanRegistry({
+      jobId: job.id,
+      includeLidarr: getScanRegistry().includeLidarr === true,
+    });
     return { action: "retry", delayS: 60, message };
   },
   onJobSuccess: onLibraryScanSuccess,

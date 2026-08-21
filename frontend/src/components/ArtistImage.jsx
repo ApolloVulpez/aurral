@@ -60,9 +60,15 @@ const ArtistImage = ({
   const [currentSrc, setCurrentSrc] = useState(() => normalizeMediaUrl(src));
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [fallbackVisible, setFallbackVisible] = useState(
+    () => typeof IntersectionObserver === "undefined",
+  );
   const fetchingRef = useRef(false);
   const triedBackendFallbackRef = useRef(false);
+  const failedSourceRef = useRef(null);
+  const visibleMbidRef = useRef(fallbackVisible ? mbid : null);
   const imgRef = useRef(null);
+  const fallbackTargetRef = useRef(null);
   const abortRef = useRef(null);
   const { canPlayArtistPreview, isArtistPreviewActive, isLoadingPreview, playArtistPreview } =
     useArtistPreviewPlayback({
@@ -124,22 +130,59 @@ const ArtistImage = ({
   );
 
   useEffect(() => {
-    fetchingRef.current = false;
+    const visible = typeof IntersectionObserver === "undefined";
+    failedSourceRef.current = null;
     triedBackendFallbackRef.current = false;
+    visibleMbidRef.current = visible ? mbid : null;
+    setFallbackVisible(visible);
+  }, [mbid, src]);
+
+  useEffect(() => {
+    if (currentSrc || !mbid || !enableBackendFallback) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setFallbackVisible(true);
+      return;
+    }
+
+    const target = fallbackTargetRef.current;
+    if (!target) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        visibleMbidRef.current = mbid;
+        setFallbackVisible(true);
+        observer.disconnect();
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [currentSrc, enableBackendFallback, mbid, src]);
+
+  useEffect(() => {
+    fetchingRef.current = false;
 
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
-    if (src) {
-      setCurrentSrc(normalizeMediaUrl(src));
+    const normalizedSrc = normalizeMediaUrl(src);
+    const sourceFailed = normalizedSrc && failedSourceRef.current === normalizedSrc;
+    if (normalizedSrc && !sourceFailed) {
+      setCurrentSrc(normalizedSrc);
       setHasError(false);
       setIsLoading(true);
-    } else if (mbid && enableBackendFallback) {
+    } else if (
+      mbid &&
+      enableBackendFallback &&
+      fallbackVisible &&
+      visibleMbidRef.current === mbid
+    ) {
       setCurrentSrc(null);
       setHasError(false);
       setIsLoading(true);
-      fetchBackendCover(mbid, artistName, controller.signal);
+      fetchBackendCover(mbid, artistName, controller.signal, Boolean(sourceFailed));
     } else {
       setCurrentSrc(null);
       setIsLoading(false);
@@ -147,7 +190,7 @@ const ArtistImage = ({
     }
 
     return () => controller.abort();
-  }, [src, mbid, artistName, fetchBackendCover, enableBackendFallback]);
+  }, [src, mbid, artistName, fetchBackendCover, enableBackendFallback, fallbackVisible]);
 
   useEffect(() => {
     const image = imgRef.current;
@@ -188,9 +231,15 @@ const ArtistImage = ({
   const handleError = () => {
     if (enableBackendFallback && mbid && !triedBackendFallbackRef.current) {
       triedBackendFallbackRef.current = true;
-      setIsLoading(true);
+      failedSourceRef.current = currentSrc;
+      setCurrentSrc(null);
       setHasError(false);
-      fetchBackendCover(mbid, artistName, abortRef.current?.signal, true);
+      if (fallbackVisible && visibleMbidRef.current === mbid) {
+        setIsLoading(true);
+        fetchBackendCover(mbid, artistName, abortRef.current?.signal, true);
+      } else {
+        setIsLoading(false);
+      }
       return;
     }
     setHasError(true);
@@ -236,6 +285,7 @@ const ArtistImage = ({
   if (showPlaceholder) {
     return (
       <div
+        ref={fallbackTargetRef}
         className={`artist-image-root ${className}`}
         style={{
           background: "var(--aurral-surface-raised)",

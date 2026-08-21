@@ -18,6 +18,28 @@ import { scanMusicRoot } from "../../backend/services/libraryFileScanner.js";
 import { indexLidarrLibrary } from "../../backend/services/libraryLidarrIndexer.js";
 import { scanConfiguredLibrary } from "../../backend/services/libraryIndexService.js";
 
+test("a local-only configured scan does not contact Lidarr", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "aurral-local-only-scan-"));
+  let lidarrCalls = 0;
+  try {
+    const result = await scanConfiguredLibrary({
+      musicRoot: root,
+      includeLidarr: false,
+      lidarrClient: {
+        isConfigured: () => true,
+        request: async () => {
+          lidarrCalls += 1;
+          throw new Error("unexpected Lidarr request");
+        },
+      },
+    });
+    assert.equal(lidarrCalls, 0);
+    assert.equal(result.lidarr.skipped, true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 const metadata = {
   common: {
     albumartist: "Aurral Fixture",
@@ -401,7 +423,7 @@ test("indexLidarrLibrary uses bulk track reads when Lidarr provides them", async
   }
 });
 
-test("indexLidarrLibrary falls back when a bulk track read fails", async () => {
+test("indexLidarrLibrary does not fan out per album when a bulk track read fails", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "aurral-lidarr-bulk-fallback-"));
   let filePath;
   try {
@@ -447,13 +469,8 @@ test("indexLidarrLibrary falls back when a bulk track read fails", async () => {
       getRootFolders: async () => [{ path: root }],
     };
 
-    const result = await indexLidarrLibrary({ client });
-    const snapshot = getLibrarySnapshot();
-    const file = snapshot.files.find((entry) => entry.path === filePath);
-
-    assert.deepEqual(calls, ["bulk-tracks", "bulk-files", "tracks:818", "files:818"]);
-    assert.equal(result.filesIndexed, 1);
-    assert.equal(file?.source, "lidarr");
+    await assert.rejects(() => indexLidarrLibrary({ client }), /bulk track read failed/);
+    assert.deepEqual(calls, ["bulk-tracks", "bulk-files"]);
   } finally {
     await rm(root, { recursive: true, force: true });
     db.prepare("DELETE FROM library_media_files WHERE source = ? AND path = ?").run(
@@ -463,7 +480,7 @@ test("indexLidarrLibrary falls back when a bulk track read fails", async () => {
   }
 });
 
-test("indexLidarrLibrary falls back when a bulk track-file read fails", async () => {
+test("indexLidarrLibrary does not fan out per album when a bulk track-file read fails", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "aurral-lidarr-bulk-file-fallback-"));
   let filePath;
   try {
@@ -509,13 +526,8 @@ test("indexLidarrLibrary falls back when a bulk track-file read fails", async ()
       getRootFolders: async () => [{ path: root }],
     };
 
-    const result = await indexLidarrLibrary({ client });
-    const snapshot = getLibrarySnapshot();
-    const file = snapshot.files.find((entry) => entry.path === filePath);
-
-    assert.deepEqual(calls, ["bulk-tracks", "bulk-files", "tracks:828", "files:828"]);
-    assert.equal(result.filesIndexed, 1);
-    assert.equal(file?.source, "lidarr");
+    await assert.rejects(() => indexLidarrLibrary({ client }), /bulk track-file read failed/);
+    assert.deepEqual(calls, ["bulk-tracks", "bulk-files"]);
   } finally {
     await rm(root, { recursive: true, force: true });
     db.prepare("DELETE FROM library_media_files WHERE source = ? AND path = ?").run(

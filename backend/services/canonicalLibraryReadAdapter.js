@@ -1,9 +1,24 @@
-import { getCanonicalLibrary } from "./libraryQueryService.js";
+import {
+  getCanonicalLibrary,
+  getCanonicalLibraryForAlbumReferences,
+  getCanonicalLibraryForArtists,
+  getCanonicalTrackPath,
+} from "./libraryQueryService.js";
 
-const firstAvailableFile = (track) =>
-  (track.files || []).find((file) => file.available) || track.files?.[0] || null;
+const readModelCache = new WeakMap();
 
-const firstReadableFile = (track) => (track?.files || []).find((file) => file.available) || null;
+const albumFiles = (track, albumId) =>
+  (track.files || []).filter((file) => file.albumId == null || file.albumId === albumId);
+
+const firstAvailableFile = (track, albumId) => {
+  const albumSpecific = (track.files || []).filter((file) => file.albumId === albumId);
+  const unscoped = (track.files || []).filter((file) => file.albumId == null);
+  return albumSpecific.find((file) => file.available)
+    || unscoped.find((file) => file.available)
+    || albumSpecific[0]
+    || unscoped[0]
+    || null;
+};
 
 const recordMatches = (record, reference) => {
   const value = String(reference ?? "").trim();
@@ -51,14 +66,17 @@ const buildAlbum = (album, artistsById, tracksById) => {
     .map((trackId) => tracksById.get(trackId))
     .filter(Boolean);
   const sizeOnDisk = albumTracks.reduce((total, track) => {
-    const file = firstAvailableFile(track);
+    const file = firstAvailableFile(track, album.id);
     return total + Number(file?.size || 0);
   }, 0);
-  const trackFileCount = albumTracks.filter((track) => track.available).length;
+  const trackFileCount = albumTracks.filter((track) =>
+    albumFiles(track, album.id).some((file) => file.available),
+  ).length;
   const providerId = album.metadata?.id ?? null;
   return {
     id: album.id,
     canonicalId: album.id,
+    identityKey: album.identityKey,
     providerId,
     providerArtistId: album.metadata?.artistId ?? null,
     artistId: album.artistId,
@@ -77,7 +95,7 @@ const buildAlbum = (album, artistsById, tracksById) => {
       trackFileCount,
       sizeOnDisk,
       percentOfTracks:
-        albumTracks.length > 0 && albumTracks.every((track) => track.available) ? 100 : 0,
+        albumTracks.length > 0 && trackFileCount === albumTracks.length ? 100 : 0,
     },
     trackIds: [...album.trackIds],
     sources: album.sources,
@@ -86,7 +104,7 @@ const buildAlbum = (album, artistsById, tracksById) => {
 };
 
 const buildTrack = (track, album) => {
-  const file = firstAvailableFile(track);
+  const file = firstAvailableFile(track, album.id);
   const relation = track.albums.find((entry) => entry.albumId === album.id);
   return {
     id: track.id,
@@ -103,7 +121,7 @@ const buildTrack = (track, album) => {
     streamFormat: file?.format || null,
     addedAt: null,
     source: file?.source || null,
-    available: track.available,
+    available: Boolean(file?.available),
     sources: track.sources,
   };
 };
@@ -130,19 +148,36 @@ export function buildCanonicalLibraryReadModel(library) {
 }
 
 export function getCanonicalLibraryReadModel({ source = "lidarr", availableOnly = true } = {}) {
-  return buildCanonicalLibraryReadModel(getCanonicalLibrary({ source, availableOnly }));
+  const library = getCanonicalLibrary({ source, availableOnly });
+  const cached = readModelCache.get(library);
+  if (cached) return cached;
+  const readModel = buildCanonicalLibraryReadModel(library);
+  readModelCache.set(library, readModel);
+  return readModel;
 }
 
-export function resolveCanonicalTrackPath(reference) {
-  const value = String(reference ?? "").trim();
-  if (!value) return null;
-  const library = getCanonicalLibrary({ availableOnly: false });
-  const track = library.tracks.find((candidate) =>
-    [candidate.id, candidate.identityKey, candidate.mbid].some(
-      (valueCandidate) => String(valueCandidate ?? "").trim() === value,
-    ),
+export function getCanonicalLibraryReadModelForArtists({
+  source = "lidarr",
+  availableOnly = true,
+  mbids = [],
+} = {}) {
+  return buildCanonicalLibraryReadModel(
+    getCanonicalLibraryForArtists({ source, availableOnly, mbids }),
   );
-  return firstReadableFile(track)?.path || null;
+}
+
+export function getCanonicalLibraryReadModelForAlbumReferences({
+  source = "lidarr",
+  availableOnly = true,
+  references = [],
+} = {}) {
+  return buildCanonicalLibraryReadModel(
+    getCanonicalLibraryForAlbumReferences({ source, availableOnly, references }),
+  );
+}
+
+export function resolveCanonicalTrackPath(albumReference, trackReference) {
+  return getCanonicalTrackPath(albumReference, trackReference);
 }
 
 export function findCanonicalArtist(artists, reference) {

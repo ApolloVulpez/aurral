@@ -16,10 +16,48 @@ const {
   stopLibraryScanWorker,
 } = await import("../../backend/services/libraryScanWorker.js");
 const { dbOps } = await import("../../backend/db/helpers/index.js");
-const { getLibraryScanQueue } = await import("../../backend/services/honkerDb.js");
+const { db } = await import("../../backend/config/db-sqlite.js");
+const { beginLibraryScan, finishLibraryScan } = await import(
+  "../../backend/services/libraryMediaStore.js"
+);
+const { processSystemTask } = await import("../../backend/services/systemTaskWorker.js");
+const {
+  getLibraryScanQueue,
+  SCHEDULED_SYSTEM_TASKS,
+} = await import("../../backend/services/honkerDb.js");
 const { createLibraryFileWatcher } = await import(
   "../../backend/services/libraryFileWatcher.js"
 );
+
+test("library scans are not scheduled as a recurring background task", () => {
+  assert.equal(
+    SCHEDULED_SYSTEM_TASKS.some((task) => task.name === "library-index-refresh"),
+    false,
+  );
+});
+
+test("library bootstrap runs only until the first completed scan", async () => {
+  const queue = getLibraryScanQueue();
+  db.prepare("DELETE FROM library_scan_runs").run();
+  clearScheduledLibraryScan();
+  let bootstrapJobId;
+  try {
+    await processSystemTask({ kind: "library-index-bootstrap" });
+    bootstrapJobId = getScheduledLibraryScanJobId();
+    assert.ok(bootstrapJobId);
+    queue.cancel(bootstrapJobId);
+    clearScheduledLibraryScan();
+
+    const scanId = beginLibraryScan({ source: "test" });
+    finishLibraryScan(scanId);
+    await processSystemTask({ kind: "library-index-bootstrap" });
+    assert.equal(getScheduledLibraryScanJobId(), null);
+  } finally {
+    if (bootstrapJobId) queue.cancel(bootstrapJobId);
+    clearScheduledLibraryScan();
+    db.prepare("DELETE FROM library_scan_runs WHERE source = 'test'").run();
+  }
+});
 
 test("library refresh queues a forced scan and exposes its queue status", async () => {
   const existingJobId = Number(dbOps.getJSONSetting("pendingLibraryScanJob")?.jobId);
@@ -54,7 +92,10 @@ test("library refresh queues a forced scan and exposes its queue status", async 
     assert.equal(statusCode, 202);
     assert.equal(body.queued, true);
     assert.equal(body.status.status, "queued");
-    assert.deepEqual(JSON.parse(getLibraryScanQueue().getJob(body.jobId).payload), { force: true });
+    assert.deepEqual(JSON.parse(getLibraryScanQueue().getJob(body.jobId).payload), {
+      force: true,
+      includeLidarr: true,
+    });
     const jobId = body.jobId;
 
     body = undefined;
@@ -95,6 +136,42 @@ test("library scan scheduling keeps one live job and recovers stale registry ent
   }
 });
 
+test("a full refresh upgrades a pending local-only scan", () => {
+  const queue = getLibraryScanQueue();
+  clearScheduledLibraryScan();
+  let jobId;
+  try {
+    jobId = scheduleLibraryScan({ includeLidarr: false });
+    assert.deepEqual(JSON.parse(queue.getJob(jobId).payload), {
+      force: false,
+      includeLidarr: false,
+    });
+    assert.equal(scheduleLibraryScan({ includeLidarr: true }), jobId);
+    assert.equal(dbOps.getJSONSetting("pendingLibraryScanJob").includeLidarr, true);
+  } finally {
+    if (jobId) queue.cancel(jobId);
+    clearScheduledLibraryScan();
+  }
+});
+
+test("claiming an unregistered scan does not inherit stale Lidarr mode", () => {
+  const queue = getLibraryScanQueue();
+  clearScheduledLibraryScan();
+  let jobId;
+  try {
+    jobId = scheduleLibraryScan({ includeLidarr: false });
+    dbOps.setJSONSetting("pendingLibraryScanJob", { includeLidarr: true });
+    assert.equal(claimScheduledLibraryScanJob(jobId), true);
+    assert.deepEqual(dbOps.getJSONSetting("pendingLibraryScanJob"), {
+      jobId,
+      includeLidarr: false,
+    });
+  } finally {
+    if (jobId) queue.cancel(jobId);
+    clearScheduledLibraryScan();
+  }
+});
+
 test("terminal library scan outcomes clear the persistent registry", () => {
   const queue = getLibraryScanQueue();
   let successJob;
@@ -117,6 +194,7 @@ test("terminal library scan outcomes clear the persistent registry", () => {
 test("library file watcher debounces library changes and ignores generated folders", async () => {
   let onChange;
   let scheduled = 0;
+  let changedRoots = [];
   const watcher = createLibraryFileWatcher({
     roots: [process.cwd()],
     debounceMs: 5,
@@ -124,8 +202,9 @@ test("library file watcher debounces library changes and ignores generated folde
       onChange = callback;
       return { close() {} };
     },
-    onChange: () => {
+    onChange: (roots) => {
       scheduled += 1;
+      changedRoots = roots;
     },
   });
 
@@ -133,6 +212,7 @@ test("library file watcher debounces library changes and ignores generated folde
   onChange("change", "Artist/Album/track.flac");
   await new Promise((resolve) => setTimeout(resolve, 15));
   assert.equal(scheduled, 1);
+  assert.deepEqual(changedRoots, [process.cwd()]);
 
   onChange("change", "aurral-weekly-flow/flow/track.flac");
   onChange("change", "_staging/track.flac");

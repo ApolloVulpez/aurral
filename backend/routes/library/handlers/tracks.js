@@ -111,7 +111,7 @@ export function registerTracks(router) {
           ? findCanonicalTracksForAlbum(tracks, album.id).map((track) => ({
               ...stripFilesystemPaths(track),
               streamPath: track.hasFile
-                ? `/library/canonical-stream/${encodeURIComponent(track.id)}`
+                ? `/library/canonical-stream/${encodeURIComponent(album.id)}/${encodeURIComponent(track.id)}`
                 : null,
             }))
           : [];
@@ -225,12 +225,12 @@ export function registerTracks(router) {
     }
   });
 
-  router.get("/canonical-stream/:trackId", noCache, async (req, res) => {
+  router.get("/canonical-stream/:albumId/:trackId", noCache, async (req, res) => {
     if (!verifyTokenAuth(req)) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const filePath = resolveCanonicalTrackPath(req.params.trackId);
+    const filePath = resolveCanonicalTrackPath(req.params.albumId, req.params.trackId);
     if (!filePath) return res.status(404).json({ error: "Track file missing" });
     try {
       if (!(await streamAudioFile(req, res, filePath)) && !res.headersSent) {
