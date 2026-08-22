@@ -1,3 +1,7 @@
+import {
+  getCanonicalAlbumsByReleaseDate,
+  iterateCanonicalArtistProjection,
+} from "../libraryQueryService.js";
 import { libraryManager } from "../libraryManager.js";
 
 const RECENT_RELEASE_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
@@ -31,26 +35,37 @@ function resolveDayMs(value) {
 }
 
 export async function getRecentMissingReleases(limit = 24, options = {}) {
-  const { lidarrClient } = await import("../lidarrClient.js");
-  if (!lidarrClient.isConfigured()) {
-    return [];
-  }
-
+  const now = resolveTimeMs(options?.now);
+  const recentCutoff = now - RECENT_RELEASE_WINDOW_MS;
+  const today = resolveDayMs(now);
+  const includeFuture = options?.includeFuture !== false;
+  const normalizedLimit = Math.max(1, Math.round(Number(limit) || 24));
   const providedArtists =
     Array.isArray(options?.artists) && options.artists.length > 0 ? options.artists : null;
   const providedAlbums = Array.isArray(options?.albums) ? options.albums : null;
   let artists = providedArtists;
   let albums = providedAlbums;
+  let canonicalAlbums = false;
 
   if (!artists && !albums) {
-    [artists, albums] = await Promise.all([
-      lidarrClient.request("/artist"),
-      lidarrClient.getAllAlbums(),
-    ]);
+    canonicalAlbums = true;
+    albums = getCanonicalAlbumsByReleaseDate({
+      from: new Date(recentCutoff).toISOString().slice(0, 10),
+      to: includeFuture ? null : new Date(today).toISOString().slice(0, 10),
+      limit: normalizedLimit,
+      missingOnly: true,
+    });
   } else if (!artists) {
-    artists = await lidarrClient.request("/artist");
+    artists = [...iterateCanonicalArtistProjection({ pageSize: 100 })];
   } else if (!albums) {
-    albums = await lidarrClient.getAllAlbums();
+    canonicalAlbums = true;
+    albums = getCanonicalAlbumsByReleaseDate({
+      from: new Date(recentCutoff).toISOString().slice(0, 10),
+      to: includeFuture ? null : new Date(today).toISOString().slice(0, 10),
+      limit: normalizedLimit,
+      missingOnly: true,
+      artistIds: providedArtists.map((artist) => artist?.canonicalId || artist?.id),
+    });
   }
 
   if (!Array.isArray(albums) || albums.length === 0) {
@@ -59,10 +74,10 @@ export async function getRecentMissingReleases(limit = 24, options = {}) {
 
   const artistsById = new Map();
   if (Array.isArray(artists)) {
-    await libraryManager.backfillLidarrArtistMappings(artists);
+    if (!canonicalAlbums) await libraryManager.backfillLidarrArtistMappings(artists);
     artists.forEach((artist) => {
       if (artist?.id != null) {
-        const mappedArtist = libraryManager.mapLidarrArtist(artist);
+        const mappedArtist = canonicalAlbums ? artist : libraryManager.mapLidarrArtist(artist);
         mappedArtist.artistName = mappedArtist.artistName || artist.name || null;
         artistsById.set(artist.id, mappedArtist);
         artistsById.set(String(artist.id), mappedArtist);
@@ -70,10 +85,28 @@ export async function getRecentMissingReleases(limit = 24, options = {}) {
     });
   }
 
-  const now = resolveTimeMs(options?.now);
-  const recentCutoff = now - RECENT_RELEASE_WINDOW_MS;
-  const today = resolveDayMs(now);
-  const includeFuture = options?.includeFuture !== false;
+  if (canonicalAlbums) {
+    return albums
+      .map((album) => {
+        const releaseDate = album.releaseDate || null;
+        const releaseTime = new Date(releaseDate).getTime();
+        if (!releaseDate || !Number.isFinite(releaseTime) || releaseTime < recentCutoff) {
+          return null;
+        }
+        const releaseDay = resolveDayMs(releaseDate);
+        if (!includeFuture && releaseDay != null && today != null && releaseDay > today) return null;
+        if (Number(album.availableTrackCount || 0) > 0) return null;
+        return {
+          ...album,
+          artistName: album.artistName || null,
+          artistMbid: album.artistMbid || album.foreignArtistId || null,
+          foreignArtistId: album.foreignArtistId || album.artistMbid || null,
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => String(right.releaseDate || "").localeCompare(String(left.releaseDate || "")))
+      .slice(0, normalizedLimit);
+  }
 
   return albums
     .map((album) => {
@@ -104,5 +137,5 @@ export async function getRecentMissingReleases(limit = 24, options = {}) {
       const dateB = right.releaseDate || "";
       return dateB.localeCompare(dateA);
     })
-    .slice(0, Math.max(1, Math.round(Number(limit) || 24)));
+    .slice(0, normalizedLimit);
 }

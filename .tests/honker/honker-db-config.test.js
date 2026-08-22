@@ -16,14 +16,15 @@ test.after(async () => {
   await cleanupIsolatedState(isolatedState);
 });
 
-test("schedule bootstrap reconciles config without resetting next fire state", () => {
+test("schedule bootstrap skips stale runs without postponing recently due work", () => {
   honkerDb.bootstrapHonkerSchedules();
   const scheduler = honkerDb.getHonkerDb().scheduler();
+  const now = Math.floor(Date.now() / 1000);
 
   const tx = honkerDb.getHonkerDb().transaction();
   tx.execute(
     "UPDATE _honker_scheduler_tasks SET next_fire_at = ?, priority = ? WHERE name = ?",
-    [42, 99, "weekly-flow-refresh"],
+    [now - 3 * 60 * 60, 99, "weekly-flow-refresh"],
   );
   tx.commit();
 
@@ -35,8 +36,23 @@ test("schedule bootstrap reconciles config without resetting next fire state", (
     (row) => row.name === "playlist-mbid-enrichment-sweep",
   );
 
-  assert.equal(weeklyFlow?.next_fire_at, 42);
+  assert.ok(weeklyFlow?.next_fire_at > now);
   assert.equal(weeklyFlow?.priority, 0);
+
+  const recentlyDue = now - 60;
+  const recentTx = honkerDb.getHonkerDb().transaction();
+  recentTx.execute(
+    "UPDATE _honker_scheduler_tasks SET next_fire_at = ? WHERE name = ?",
+    [recentlyDue, "weekly-flow-refresh"],
+  );
+  recentTx.commit();
+
+  honkerDb.bootstrapHonkerSchedules();
+
+  const preserved = scheduler
+    .list()
+    .find((row) => row.name === "weekly-flow-refresh");
+  assert.equal(preserved?.next_fire_at, recentlyDue);
   assert.equal(enrichment?.max_attempts, 4);
   assert.equal(rows.length, honkerDb.SCHEDULED_SYSTEM_TASKS.length);
 });
@@ -78,6 +94,7 @@ test("startup only queues due bootstrap work and a pending migration", () => {
       .map((row) => JSON.parse(row.payload).kind);
 
   clearQueue();
+  honkerDb.enqueueHonkerStartupTasks();
   honkerDb.enqueueHonkerStartupTasks();
   assert.deepEqual(queuedKinds(), [
     "playlist-startup-migration",

@@ -16,12 +16,14 @@ const [isolatedState, honkerDbModule, refreshScheduler, discoveryIndex] =
 
 const {
   discoveryNeedsRefresh,
+  bootstrapDiscoveryRefresh,
   enqueueDiscoveryRefresh,
   markDiscoveryRefreshDequeued,
   recoverDeadDiscoveryRefresh,
   scheduleNextDiscoveryRefresh,
 } = refreshScheduler;
 const { getDiscoveryCache } = discoveryIndex;
+const originalLastfmApiKey = process.env.LASTFM_API_KEY;
 
 let heldGlobalRefreshLock = null;
 
@@ -69,13 +71,36 @@ function countDiscoveryRefreshJobs() {
   );
 }
 
+function discoveryRefreshPayloads() {
+  return honkerDbModule
+    .getHonkerDb()
+    .query("SELECT payload FROM _honker_live WHERE queue = ? ORDER BY id", [
+      "discovery-refresh",
+    ])
+    .map((row) => JSON.parse(row.payload));
+}
+
+function setDiscoveryCache(overrides = {}) {
+  Object.assign(getDiscoveryCache(), {
+    recommendations: [],
+    globalTop: [],
+    topGenres: [],
+    lastUpdated: null,
+    isUpdating: false,
+    ...overrides,
+  });
+}
+
 test.beforeEach(() => {
+  clearDiscoveryRefreshJobs();
   markDiscoveryRefreshDequeued();
-  getDiscoveryCache().isUpdating = false;
+  setDiscoveryCache();
   releaseHeldGlobalRefreshLock();
 });
 
 test.after(async () => {
+  if (originalLastfmApiKey === undefined) delete process.env.LASTFM_API_KEY;
+  else process.env.LASTFM_API_KEY = originalLastfmApiKey;
   releaseHeldGlobalRefreshLock();
   markDiscoveryRefreshDequeued();
   await cleanupIsolatedState(isolatedState);
@@ -92,6 +117,18 @@ test("discoveryNeedsRefresh returns true when cache is empty", () => {
   );
 });
 
+test("discoveryNeedsRefresh retries a recent empty cache", () => {
+  assert.equal(
+    discoveryNeedsRefresh({
+      recommendations: [],
+      globalTop: [],
+      topGenres: [],
+      lastUpdated: new Date().toISOString(),
+    }),
+    true,
+  );
+});
+
 test("discoveryNeedsRefresh returns false for fresh populated cache", () => {
   assert.equal(
     discoveryNeedsRefresh({
@@ -101,6 +138,64 @@ test("discoveryNeedsRefresh returns false for fresh populated cache", () => {
     }),
     false,
   );
+});
+
+test("first discovery startup queues one refresh", async () => {
+  process.env.LASTFM_API_KEY = "test-key";
+
+  await bootstrapDiscoveryRefresh();
+
+  const payloads = discoveryRefreshPayloads();
+  assert.equal(payloads.length, 1);
+  assert.equal(payloads[0].reason, "startup");
+  assert.equal(payloads[0].scheduleOnly, false);
+});
+
+test("recent empty discovery cache queues one recovery refresh", async () => {
+  process.env.LASTFM_API_KEY = "test-key";
+  setDiscoveryCache({
+    recommendations: [],
+    globalTop: [],
+    topGenres: [],
+    lastUpdated: new Date().toISOString(),
+  });
+
+  await bootstrapDiscoveryRefresh();
+  await bootstrapDiscoveryRefresh();
+
+  const payloads = discoveryRefreshPayloads();
+  assert.equal(payloads.length, 1);
+  assert.equal(payloads[0].reason, "startup");
+  assert.equal(payloads[0].scheduleOnly, false);
+});
+
+test("stale and incomplete discovery caches retry", async () => {
+  process.env.LASTFM_API_KEY = "test-key";
+  setDiscoveryCache({
+    recommendations: [{ id: "old" }],
+    topGenres: ["rock"],
+    lastUpdated: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+  });
+
+  await bootstrapDiscoveryRefresh();
+  assert.equal(discoveryRefreshPayloads()[0].reason, "startup");
+
+  clearDiscoveryRefreshJobs();
+  markDiscoveryRefreshDequeued();
+  setDiscoveryCache({ recommendations: [{ id: "partial" }] });
+
+  await bootstrapDiscoveryRefresh();
+  assert.equal(discoveryRefreshPayloads()[0].reason, "startup");
+});
+
+test("repeated startup checks do not create duplicate active refresh jobs", async () => {
+  process.env.LASTFM_API_KEY = "test-key";
+  setDiscoveryCache({ lastUpdated: null });
+
+  await bootstrapDiscoveryRefresh();
+  await bootstrapDiscoveryRefresh();
+
+  assert.equal(countDiscoveryRefreshJobs(), 1);
 });
 
 test("enqueueDiscoveryRefresh deduplicates active refresh requests", () => {

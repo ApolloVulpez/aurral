@@ -11,6 +11,18 @@ import { requireAuth } from "../../../middleware/requirePermission.js";
 import { buildArtistRequestKey, pendingArtistRequests } from "../utils.js";
 import { getArtistByMbid } from "../../../services/providers/brainzmashProvider.js";
 import { getArtistTagPayload, buildArtistBase } from "../shared/transform.js";
+import { getCanonicalArtistProjection } from "../../../services/libraryQueryService.js";
+
+export function getCanonicalLidarrArtist(reference) {
+  const artist = getCanonicalArtistProjection({ reference })[0] || null;
+  if (!artist?.lidarrManaged) return null;
+  return {
+    id: artist.providerId || artist.id,
+    artistName: artist.artistName,
+    monitored: artist.monitored,
+    statistics: artist.statistics,
+  };
+}
 
 export function registerDetails(router) {
   const parseSelectedReleaseTypes = (value) =>
@@ -146,24 +158,13 @@ export function registerDetails(router) {
 
       logger.info("api", "Fetching artist details", { mbid });
 
-      const { lidarrClient } =
-        await import("../../../services/lidarrClient.js");
       let data = null;
       const override = dbOps.getArtistOverride(mbid);
       const resolvedMbid = override?.musicbrainzId || mbid;
 
-      let lidarrArtist = null;
-
-      if (lidarrClient.isConfigured()) {
-        try {
-          lidarrArtist = await lidarrClient.getArtistByMbid(mbid);
-          if (lidarrArtist) {
-            logger.info("api", "Found artist in Lidarr", { artistName: lidarrArtist.artistName });
-          }
-        } catch (error) {
-          logger.warn("api", "Failed to fetch from Lidarr", { mbid, error: error.message });
-        }
-      }
+      const lidarrArtist =
+        getCanonicalLidarrArtist(resolvedMbid) ||
+        (resolvedMbid === mbid ? null : getCanonicalLidarrArtist(mbid));
 
       if (lidarrArtist) {
         const artistMbid = override?.musicbrainzId || mbid;

@@ -3,10 +3,16 @@ import { UUID_REGEX } from "../../lib/uuid.js";
 import { dbOps, userOps } from "../db/helpers/index.js";
 import { hasPermission } from "../middleware/auth.js";
 import {
+  iterateCanonicalArtistProjection,
   getCanonicalLibraryPage,
   getCanonicalTrack,
   invalidateCanonicalLibraryCache,
 } from "./libraryQueryService.js";
+import { scheduleLibraryScan } from "./libraryScanWorker.js";
+import {
+  clearCanonicalLidarrAlbum,
+  clearCanonicalLidarrArtist,
+} from "./libraryMediaStore.js";
 const normalizeTypeName = (value) =>
   String(value || "")
     .toLowerCase()
@@ -48,6 +54,11 @@ const _albumAddInflight = new Map();
 const _artistMappingInflight = new Map();
 const ALBUM_OWNED_BY_DIFFERENT_ARTIST_ERROR =
   "Album already exists in Lidarr under a different artist";
+
+function scheduleCanonicalLibraryReconciliation() {
+  invalidateCanonicalLibraryCache();
+  return scheduleLibraryScan({ includeLidarr: true });
+}
 
 function buildTrackFileIndex(trackFiles) {
   const index = new Map();
@@ -318,6 +329,7 @@ export class LibraryManager {
       logger.info('library', `[LibraryManager] Added artist "${artistName}" to Lidarr`);
       const mappedArtist = this.mapLidarrArtist(lidarrArtist);
       upsertCachedArtist(mappedArtist);
+      scheduleCanonicalLibraryReconciliation();
       import("./aurralHistoryService.js")
         .then(({ recordArtistAdded }) =>
           recordArtistAdded({
@@ -832,7 +844,11 @@ export class LibraryManager {
       });
   }
 
-  async getAllArtists({ forceRefresh = false } = {}) {
+  async getAllArtists() {
+    return [...iterateCanonicalArtistProjection({ pageSize: 100 })];
+  }
+
+  async syncLidarrArtists({ forceRefresh = false } = {}) {
     if (
       forceRefresh !== true &&
       _cachedArtists.length > 0 &&
@@ -867,6 +883,7 @@ export class LibraryManager {
           await this.backfillLidarrArtistMappings(lidarrArtists);
           _cachedArtists = lidarrArtists.map((a) => this.mapLidarrArtist(a));
           _artistsCachedAt = Date.now();
+          scheduleCanonicalLibraryReconciliation();
           import("../../services/unifiedSearchService.js").then(({ clearSearchContextCache }) => clearSearchContextCache()).catch(() => {});
           return _cachedArtists;
         } catch (error) {
@@ -1078,6 +1095,7 @@ export class LibraryManager {
           monitor: normalizedMonitorOption,
         };
         upsertCachedArtist(mapped);
+        scheduleCanonicalLibraryReconciliation();
         return mapped;
       }
       return this.mapLidarrArtist(lidarrArtist);
@@ -1097,6 +1115,9 @@ export class LibraryManager {
       await lidarr.deleteArtist(lidarrArtist.id, deleteFiles);
       dbOps.deleteLidarrArtistIdMap(mbid);
       removeCachedArtistByMbid(mbid);
+      clearCanonicalLidarrArtist(mbid);
+      clearCanonicalLidarrArtist(lidarrArtist.foreignArtistId);
+      scheduleCanonicalLibraryReconciliation();
       logger.info('library', `[LibraryManager] Deleted artist "${lidarrArtist.artistName}" from Lidarr`);
       return { success: true };
     } catch (error) {
@@ -1173,7 +1194,9 @@ export class LibraryManager {
           .catch(() => existingAlbum);
         const refreshedArtist = await lidarr.getArtist(artistId).catch(() => fallbackArtist);
         if (!refreshedArtist) return null;
-        return this.mapLidarrAlbum(refreshedExisting, refreshedArtist);
+        const mapped = this.mapLidarrAlbum(refreshedExisting, refreshedArtist);
+        scheduleCanonicalLibraryReconciliation();
+        return mapped;
       };
       let lidarrArtist = null;
       const artistResolveAttempts = 8;
@@ -1273,7 +1296,9 @@ export class LibraryManager {
         lidarrAlbum = await lidarr.getAlbum(lidarrAlbum.id).catch(() => lidarrAlbum);
       }
       const updatedArtist = await lidarr.getArtist(artistId);
-      return this.mapLidarrAlbum(lidarrAlbum, updatedArtist);
+      const mapped = this.mapLidarrAlbum(lidarrAlbum, updatedArtist);
+      scheduleCanonicalLibraryReconciliation();
+      return mapped;
     } catch (error) {
       logger.error('library', `[LibraryManager] Failed to add album to Lidarr: ${error.message}`);      return { error: error.message };
     }
@@ -1513,7 +1538,9 @@ export class LibraryManager {
         }
         const updated = await lidarr.getAlbum(id);
         const lidarrArtist = await lidarr.getArtist(updated.artistId);
-        return this.mapLidarrAlbum(updated, lidarrArtist);
+        const mapped = this.mapLidarrAlbum(updated, lidarrArtist);
+        scheduleCanonicalLibraryReconciliation();
+        return mapped;
       } catch (error) {
         const msg = error.message || "";
         const isTransient =
@@ -1540,6 +1567,8 @@ export class LibraryManager {
     }
     try {
       await lidarr.deleteAlbum(id, deleteFiles);
+      clearCanonicalLidarrAlbum(id);
+      scheduleCanonicalLibraryReconciliation();
       return { success: true };
     } catch (error) {
       logger.error('library', `[LibraryManager] Failed to delete album from Lidarr: ${error.message}`);      return { success: false, error: error.message };
@@ -1590,7 +1619,7 @@ export class LibraryManager {
       }
 
       await lidarr.deleteTrackFile(trackFileId);
-      invalidateCanonicalLibraryCache();
+      scheduleCanonicalLibraryReconciliation();
       return { success: true };
     } catch (error) {
       logger.error('library', `[LibraryManager] Failed to delete track file: ${error.message}`);

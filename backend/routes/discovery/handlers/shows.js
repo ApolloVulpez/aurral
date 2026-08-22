@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { requireAuth } from "../../../middleware/requirePermission.js";
+import { db } from "../../../config/db-sqlite.js";
 import { dbOps, userOps } from "../../../db/helpers/index.js";
 import { getTicketmasterApiKey, getLastfmApiKey } from "../../../services/apiClients/index.js";
-import { libraryManager } from "../../../services/libraryManager.js";
+import { iterateCanonicalArtistProjection } from "../../../services/libraryQueryService.js";
 import {
   getDiscoveryCache,
   getDiscoveryFeedback,
@@ -13,6 +15,34 @@ import {
   getListenHistoryProfile,
 } from "../../../services/listeningHistory.js";
 import { getNearbyShows } from "../../../services/nearbyShowsService.js";
+
+const libraryArtistNamesStmt = db.prepare(
+  "SELECT name FROM library_artists ORDER BY id",
+);
+
+const fingerprintArtists = (artists) => {
+  const names = [
+    ...new Set(
+      (Array.isArray(artists) ? artists : [])
+        .map((artist) => String(artist?.artistName || artist?.name || "").trim())
+        .filter(Boolean),
+    ),
+  ].sort();
+  return createHash("sha256").update(JSON.stringify(names)).digest("hex");
+};
+
+export const buildShowsResponseCacheKey = ({
+  userId,
+  libraryArtists,
+  recommendedArtists,
+  trendingArtists,
+}) =>
+  JSON.stringify([
+    userId,
+    fingerprintArtists(libraryArtists),
+    fingerprintArtists(recommendedArtists),
+    fingerprintArtists(trendingArtists),
+  ]);
 
 export function registerShows(router) {
   router.get("/nearby-shows", requireAuth, async (req, res) => {
@@ -39,7 +69,6 @@ export function registerShows(router) {
       const radiusMiles = Number.isFinite(configuredRadius)
         ? Math.max(5, Math.min(250, Math.floor(configuredRadius)))
         : undefined;
-      const libraryArtists = await libraryManager.getAllArtists();
       const reqUser = userOps.getUserById(req.user.id);
       const userCacheNamespace = getLastfmApiKey()
         ? getListenHistoryCacheNamespace(getListenHistoryProfile(reqUser || {}))
@@ -58,14 +87,21 @@ export function registerShows(router) {
             feedback,
           }).slice(0, 18)
         : [];
+      const libraryArtistNames = libraryArtistNamesStmt.all();
       const nearbyShows = await getNearbyShows({
         req,
         zipCode,
-        libraryArtists,
+        libraryArtists: () => [...iterateCanonicalArtistProjection({ pageSize: 100 })],
         recommendedArtists,
         trendingArtists,
         limit: req.query.limit,
         radiusMiles,
+        responseCacheKey: buildShowsResponseCacheKey({
+          userId: req.user.id,
+          libraryArtists: libraryArtistNames,
+          recommendedArtists,
+          trendingArtists,
+        }),
       });
 
       res.set("Cache-Control", "no-cache, no-store, must-revalidate");

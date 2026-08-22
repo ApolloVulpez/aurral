@@ -1,10 +1,16 @@
 import { db, dbHelpers } from "../config/db-sqlite.js";
+import {
+  computeLibraryGenreStats,
+  rebuildStoredLibraryGenreStats,
+} from "../config/library-search-index.js";
+import { getLibrarySearchMatch } from "./librarySearchIndex.js";
 
 const SOURCES = new Set(["aurral", "lidarr"]);
 const libraryCache = new Map();
 const PAGE_KINDS = new Set(["artists", "albums", "tracks", "genres"]);
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 100;
+const MAX_ARTIST_PROJECTION_PAGE_SIZE = 10000;
 
 const parseJson = (value) => {
   if (!value) return null;
@@ -14,6 +20,12 @@ const parseJson = (value) => {
     return null;
   }
 };
+
+const parseSources = (value) => String(value || "")
+  .split(",")
+  .map((source) => source.trim())
+  .filter(Boolean)
+  .sort();
 
 function normalizeSource(source) {
   const value = String(source || "").trim().toLowerCase();
@@ -64,13 +76,13 @@ const CANONICAL_SELECT = `SELECT
 const albumMediaCondition = (mediaAlias, albumTrackAlias) =>
   `(${mediaAlias}.album_id = ${albumTrackAlias}.album_id OR ${mediaAlias}.album_id IS NULL)`;
 
-const CANONICAL_FROM = `FROM library_media_files AS media
-  JOIN library_tracks AS track ON track.id = media.track_id
-  JOIN library_album_tracks AS album_track
-    ON album_track.track_id = track.id
-    AND ${albumMediaCondition("media", "album_track")}
-  JOIN library_albums AS album ON album.id = album_track.album_id
-  JOIN library_artists AS artist ON artist.id = album.artist_id`;
+const CANONICAL_FROM = `FROM library_artists AS artist
+  JOIN library_albums AS album ON album.artist_id = artist.id
+  JOIN library_album_tracks AS album_track ON album_track.album_id = album.id
+  JOIN library_tracks AS track ON track.id = album_track.track_id
+  LEFT JOIN library_media_files AS media
+    ON media.track_id = track.id
+    AND ${albumMediaCondition("media", "album_track")}`;
 
 function buildLibraryFromRows(rows) {
   const artists = new Map();
@@ -219,6 +231,291 @@ export function getCanonicalArtistMbids({ source = null, availableOnly = false, 
      WHERE ${conditions.join(" AND ")}`,
   ).all(...parameters);
   return new Set(rows.map((row) => row.mbid).filter(Boolean));
+}
+
+const canonicalArtistProjection = (row) => {
+  const metadata = parseJson(row.metadata_json) || {};
+  const providerId = metadata.id == null ? null : String(metadata.id);
+  const monitorOption = metadata.monitor || metadata.addOptions?.monitor || "none";
+  const sources = new Set(
+    String(row.sources || "")
+      .split(",")
+      .map((source) => source.trim())
+      .filter(Boolean),
+  );
+  if (metadata.librarySource === "lidarr") sources.add("lidarr");
+  return {
+    id: String(row.id),
+    canonicalId: String(row.id),
+    providerId,
+    lidarrManaged: metadata.librarySource === "lidarr",
+    mbid: row.mbid || null,
+    foreignArtistId: metadata.foreignArtistId || row.mbid || row.identity_key,
+    artistName: row.name,
+    name: row.name,
+    sortName: row.sort_name || row.name,
+    path: metadata.path || null,
+    addedAt: metadata.added || (row.created_at ? new Date(row.created_at).toISOString() : null),
+    monitored: metadata.monitored === true,
+    monitorOption,
+    monitorNewItems: metadata.monitorNewItems || "none",
+    addOptions: metadata.addOptions || { monitor: monitorOption },
+    quality: metadata.qualityProfile?.name || "standard",
+    albumFolders: true,
+    statistics: {
+      albumCount: Number(row.album_count || 0),
+      trackCount: Number(row.track_count || 0),
+      sizeOnDisk: Number(row.size_on_disk || 0),
+    },
+    sources: [...sources].sort(),
+    available: Boolean(row.available),
+    stale: Boolean(row.stale),
+  };
+};
+
+const canonicalArtistKeyProjection = (row) => {
+  const metadata = parseJson(row.metadata_json) || {};
+  return {
+    id: String(row.id),
+    mbid: row.mbid || null,
+    foreignArtistId: metadata.foreignArtistId || row.mbid || row.identity_key,
+    name: row.name,
+    artistName: row.name,
+  };
+};
+
+export function getCanonicalArtistKeyProjection() {
+  const rows = db.prepare(
+    `SELECT id, identity_key, mbid, name, metadata_json
+     FROM library_artists`,
+  ).all();
+  return rows.map(canonicalArtistKeyProjection);
+}
+
+function buildCanonicalArtistProjectionQuery({
+  page = 1,
+  pageSize = 100,
+  offset = null,
+  reference = null,
+} = {}) {
+  const normalizedPage = Math.max(1, Number.parseInt(page, 10) || 1);
+  const normalizedPageSize = Math.min(
+    MAX_ARTIST_PROJECTION_PAGE_SIZE,
+    Math.max(1, Number.parseInt(pageSize, 10) || 100),
+  );
+  const normalizedOffset = offset == null
+    ? (normalizedPage - 1) * normalizedPageSize
+    : Math.max(0, Number.parseInt(offset, 10) || 0);
+  const references = normalizeLookupValues(reference == null ? [] : [reference]);
+  const parameters = [];
+  const where = [];
+  if (references.length) {
+    where.push(`(
+      artist.id IN (${references.map(() => "?").join(",")}) OR
+      artist.mbid IN (${references.map(() => "?").join(",")}) OR
+      artist.identity_key IN (${references.map(() => "?").join(",")}) OR
+      CAST(json_extract(artist.metadata_json, '$.id') AS TEXT) IN (${references.map(() => "?").join(",")}) OR
+      CAST(json_extract(artist.metadata_json, '$.foreignArtistId') AS TEXT) IN (${references.map(() => "?").join(",")}) OR
+      lower(artist.name) IN (${references.map(() => "lower(?)").join(",")})
+    )`);
+    parameters.push(
+      ...references,
+      ...references,
+      ...references,
+      ...references,
+      ...references,
+      ...references,
+    );
+  }
+  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const limit = references.length ? "" : "LIMIT ? OFFSET ?";
+  if (!references.length) {
+    parameters.push(normalizedPageSize, normalizedOffset);
+  }
+  return {
+    parameters,
+    sql: `
+    WITH artist_page AS MATERIALIZED (
+      SELECT
+        artist.id,
+        artist.identity_key,
+        artist.mbid,
+        artist.name,
+        artist.sort_name,
+        artist.metadata_json,
+        artist.created_at
+      FROM library_artists AS artist
+      ${whereSql}
+      ORDER BY artist.sort_name COLLATE NOCASE, artist.name COLLATE NOCASE, artist.id
+      ${limit}
+    )
+    SELECT
+      artist.id,
+      artist.identity_key,
+      artist.mbid,
+      artist.name,
+      artist.sort_name,
+      artist.metadata_json,
+      artist.created_at,
+      COUNT(DISTINCT album.id) AS album_count,
+      COUNT(DISTINCT album_track.track_id) AS track_count,
+      COALESCE(SUM(CASE WHEN media.available = 1 THEN media.size ELSE 0 END), 0) AS size_on_disk,
+      GROUP_CONCAT(DISTINCT media.source) AS sources,
+      MAX(CASE WHEN media.available = 1 THEN 1 ELSE 0 END) AS available,
+      CASE WHEN EXISTS (
+        SELECT 1
+        FROM library_scan_runs AS scan
+        WHERE scan.source = 'lidarr'
+          AND scan.status = 'failed'
+          AND scan.id > COALESCE((
+            SELECT complete.id
+            FROM library_scan_runs AS complete
+            WHERE complete.source = 'lidarr' AND complete.status = 'complete'
+            ORDER BY complete.id DESC
+            LIMIT 1
+          ), 0)
+      ) THEN 1 ELSE 0 END AS stale
+    FROM artist_page AS artist
+    LEFT JOIN library_albums AS album ON album.artist_id = artist.id
+    LEFT JOIN library_album_tracks AS album_track ON album_track.album_id = album.id
+    LEFT JOIN library_media_files AS media ON media.track_id = album_track.track_id
+      AND (media.album_id = album_track.album_id OR media.album_id IS NULL)
+    GROUP BY artist.id
+    ORDER BY artist.sort_name COLLATE NOCASE, artist.name COLLATE NOCASE, artist.id
+  `,
+  };
+}
+
+export function getCanonicalArtistProjection(options = {}) {
+  const query = buildCanonicalArtistProjectionQuery(options);
+  const rows = db.prepare(query.sql).all(...query.parameters);
+  return rows.map(canonicalArtistProjection);
+}
+
+export function getCanonicalArtistProjectionQueryPlan(options = {}) {
+  const query = buildCanonicalArtistProjectionQuery(options);
+  return db.prepare(`EXPLAIN QUERY PLAN ${query.sql}`).all(...query.parameters);
+}
+
+export function* iterateCanonicalArtistProjection({ pageSize = 100 } = {}) {
+  for (let page = 1; ; page += 1) {
+    const artists = getCanonicalArtistProjection({ page, pageSize });
+    yield* artists;
+    if (artists.length < Math.min(100, Math.max(1, Number.parseInt(pageSize, 10) || 100))) break;
+  }
+}
+
+const canonicalDateAlbumProjection = (row) => {
+  const metadata = parseJson(row.metadata_json) || {};
+  const artistMetadata = parseJson(row.artist_metadata_json) || {};
+  const trackCount = Number(row.track_count || 0);
+  const availableTrackCount = Number(row.available_track_count || 0);
+  return {
+    id: String(row.id),
+    canonicalId: String(row.id),
+    providerId: metadata.id == null ? null : String(metadata.id),
+    artistId: String(row.artist_id),
+    providerArtistId: artistMetadata.id == null ? null : String(artistMetadata.id),
+    artistName: row.artist_name,
+    artistMbid: row.artist_mbid || null,
+    foreignArtistId:
+      artistMetadata.foreignArtistId || row.artist_mbid || row.artist_identity_key,
+    mbid: row.mbid || row.release_group_mbid || null,
+    releaseGroupMbid: row.release_group_mbid || null,
+    foreignAlbumId: row.mbid || row.release_group_mbid || row.identity_key,
+    albumName: row.title,
+    title: row.title,
+    releaseDate: row.release_date,
+    monitored: metadata.monitored === true,
+    albumType: metadata.albumType || metadata.releaseType || null,
+    trackCount,
+    availableTrackCount,
+    statistics: {
+      trackCount,
+      trackFileCount: availableTrackCount,
+      sizeOnDisk: Number(row.size_on_disk || 0),
+      percentOfTracks: trackCount > 0
+        ? Math.round((availableTrackCount / trackCount) * 100)
+        : 0,
+    },
+  };
+};
+
+export function getCanonicalAlbumsByReleaseDate({
+  from,
+  to = null,
+  limit = 100,
+  missingOnly = false,
+  artistIds = [],
+} = {}) {
+  const fromDate = String(from || "").trim();
+  const toDate = String(to || "").trim();
+  if (!fromDate) return [];
+  const conditions = ["album.release_date >= ?"];
+  const parameters = [fromDate];
+  if (toDate) {
+    conditions.push("album.release_date <= ?");
+    parameters.push(toDate);
+  }
+  const canonicalArtistIds = [...new Set(
+    (Array.isArray(artistIds) ? artistIds : [])
+      .map((value) => Number(value))
+      .filter((value) => Number.isSafeInteger(value) && value > 0),
+  )];
+  if (Array.isArray(artistIds) && artistIds.length > 0) {
+    if (!canonicalArtistIds.length) return [];
+    conditions.push(
+      "album.artist_id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))",
+    );
+    parameters.push(JSON.stringify(canonicalArtistIds));
+  }
+  if (missingOnly === true) {
+    conditions.push(`NOT EXISTS (
+      SELECT 1
+      FROM library_album_tracks AS owned_relation
+      JOIN library_media_files AS owned_media
+        ON owned_media.track_id = owned_relation.track_id
+        AND (owned_media.album_id = owned_relation.album_id OR owned_media.album_id IS NULL)
+      WHERE owned_relation.album_id = album.id
+        AND owned_media.available = 1
+    )`);
+  }
+  parameters.push(Math.min(1000, Math.max(1, Number.parseInt(limit, 10) || 100)));
+  const rows = db.prepare(`
+    WITH date_albums AS MATERIALIZED (
+      SELECT
+        album.id,
+        album.identity_key,
+        album.mbid,
+        album.release_group_mbid,
+        album.artist_id,
+        album.title,
+        album.release_date,
+        album.metadata_json,
+        artist.identity_key AS artist_identity_key,
+        artist.mbid AS artist_mbid,
+        artist.name AS artist_name,
+        artist.metadata_json AS artist_metadata_json
+      FROM library_albums AS album
+      JOIN library_artists AS artist ON artist.id = album.artist_id
+      WHERE ${conditions.join(" AND ")}
+      ORDER BY album.release_date DESC, album.id DESC
+      LIMIT ?
+    )
+    SELECT
+      album.*,
+      COUNT(DISTINCT album_track.track_id) AS track_count,
+      COUNT(DISTINCT CASE WHEN media.available = 1 THEN album_track.track_id END) AS available_track_count,
+      COALESCE(SUM(CASE WHEN media.available = 1 THEN media.size ELSE 0 END), 0) AS size_on_disk
+    FROM date_albums AS album
+    LEFT JOIN library_album_tracks AS album_track ON album_track.album_id = album.id
+    LEFT JOIN library_media_files AS media
+      ON media.track_id = album_track.track_id
+      AND (media.album_id = album_track.album_id OR media.album_id IS NULL)
+    GROUP BY album.id
+    ORDER BY album.release_date DESC, album.id DESC
+  `).all(...parameters);
+  return rows.map(canonicalDateAlbumProjection);
 }
 
 export function getCanonicalTrackPath(albumReference, trackReference) {
@@ -429,6 +726,87 @@ export function getCanonicalLibraryForArtists({
   });
 }
 
+function getCanonicalLibraryForIds(kind, ids, source, availableOnly) {
+  const values = [...new Set((Array.isArray(ids) ? ids : [])
+    .map((value) => Number(value))
+    .filter((value) => Number.isSafeInteger(value) && value > 0))];
+  if (!values.length) return { artists: [], albums: [], tracks: [] };
+  const alias = kind === "artists" ? "artist" : kind === "albums" ? "album" : "track";
+  return getScopedCanonicalLibrary({
+    source,
+    availableOnly,
+    conditions: [`${alias}.id IN (${values.map(() => "?").join(",")})`],
+    parameters: values,
+  });
+}
+
+function resolveCanonicalReferenceIds(table, references, columns) {
+  const numericIds = references
+    .filter((reference) => /^\d+$/.test(reference))
+    .map(Number);
+  const queries = [];
+  const parameters = [];
+  if (numericIds.length) {
+    queries.push(`SELECT id FROM ${table} WHERE id IN (${numericIds.map(() => "?").join(",")})`);
+    parameters.push(...numericIds);
+  }
+  for (const column of columns) {
+    queries.push(
+      `SELECT id FROM ${table} WHERE ${column} IN (${references.map(() => "?").join(",")})`,
+    );
+    parameters.push(...references);
+  }
+  return db.prepare(queries.join(" UNION ")).all(...parameters).map((row) => row.id);
+}
+
+export function getCanonicalLibraryForArtistReferences({
+  source = null,
+  availableOnly = false,
+  references: requestedReferences = [],
+} = {}) {
+  const references = normalizeLookupValues(requestedReferences);
+  if (!references.length) return { artists: [], albums: [], tracks: [] };
+  const ids = resolveCanonicalReferenceIds(
+    "library_artists",
+    references,
+    [
+      "identity_key",
+      "mbid",
+      "CAST(CASE WHEN json_valid(metadata_json) THEN json_extract(metadata_json, '$.id') END AS TEXT)",
+      "CAST(CASE WHEN json_valid(metadata_json) THEN json_extract(metadata_json, '$.foreignArtistId') END AS TEXT)",
+      "name COLLATE NOCASE",
+    ],
+  );
+  return getCanonicalLibraryForIds("artists", ids, source, availableOnly);
+}
+
+export function getCanonicalLibraryForAlbumIds({
+  source = null,
+  availableOnly = false,
+  ids = [],
+} = {}) {
+  return getCanonicalLibraryForIds("albums", ids, source, availableOnly);
+}
+
+export function getCanonicalLibraryForTrackIds({
+  source = null,
+  availableOnly = false,
+  ids = [],
+  albumId = null,
+} = {}) {
+  const values = [...new Set((Array.isArray(ids) ? ids : [])
+    .map((value) => Number(value))
+    .filter((value) => Number.isSafeInteger(value) && value > 0))];
+  if (!values.length) return { artists: [], albums: [], tracks: [] };
+  const conditions = [`track.id IN (${values.map(() => "?").join(",")})`];
+  const parameters = [...values];
+  if (albumId !== null && albumId !== undefined && String(albumId).trim()) {
+    conditions.push("album.id = ?");
+    parameters.push(Number(albumId));
+  }
+  return getScopedCanonicalLibrary({ source, availableOnly, conditions, parameters });
+}
+
 export function getCanonicalLibraryForAlbumReferences({
   source = null,
   availableOnly = false,
@@ -436,56 +814,35 @@ export function getCanonicalLibraryForAlbumReferences({
 } = {}) {
   const references = normalizeLookupValues(requestedReferences);
   if (!references.length) return { artists: [], albums: [], tracks: [] };
-
+  const ids = resolveCanonicalReferenceIds(
+    "library_albums",
+    references,
+    ["identity_key", "mbid", "release_group_mbid"],
+  );
+  if (!ids.length) return { artists: [], albums: [], tracks: [] };
   const sourceFilter = normalizeSource(source);
-  const referenceCondition = `(
-    album.mbid IN (${references.map(() => "?").join(",")}) OR
-    album.release_group_mbid IN (${references.map(() => "?").join(",")}) OR
-    album.identity_key IN (${references.map(() => "?").join(",")})
-  )`;
-  const albumParameters = [];
   const mediaConditions = [
     "media.track_id = album_track.track_id",
     albumMediaCondition("media", "album_track"),
   ];
+  const parameters = [];
   if (sourceFilter) {
     mediaConditions.push("media.source = ?");
-    albumParameters.push(sourceFilter);
+    parameters.push(sourceFilter);
   }
   if (availableOnly === true) mediaConditions.push("media.available = 1");
-  albumParameters.push(...references, ...references, ...references);
-
-  const albumIds = db.prepare(
-    `SELECT DISTINCT album.id AS id
-     FROM library_albums AS album
-     JOIN library_album_tracks AS album_track ON album_track.album_id = album.id
-     JOIN library_media_files AS media ON ${mediaConditions.join(" AND ")}
-     WHERE ${referenceCondition}`,
-  ).all(...albumParameters).map((row) => row.id);
-  if (!albumIds.length) return { artists: [], albums: [], tracks: [] };
-
-  const trackMediaConditions = [
-    "media.track_id = album_track.track_id",
-    albumMediaCondition("media", "album_track"),
-  ];
-  const trackParameters = [];
-  if (sourceFilter) {
-    trackMediaConditions.push("media.source = ?");
-    trackParameters.push(sourceFilter);
-  }
-  if (availableOnly === true) trackMediaConditions.push("media.available = 1");
-  trackParameters.push(...albumIds);
-
+  parameters.push(...ids);
+  const mediaJoin = sourceFilter || availableOnly === true ? "JOIN" : "LEFT JOIN";
   const rows = db.prepare(
     `${CANONICAL_SELECT}
      FROM library_tracks AS track
      JOIN library_album_tracks AS album_track ON album_track.track_id = track.id
      JOIN library_albums AS album ON album.id = album_track.album_id
      JOIN library_artists AS artist ON artist.id = album.artist_id
-     LEFT JOIN library_media_files AS media ON ${trackMediaConditions.join(" AND ")}
-     WHERE album.id IN (${albumIds.map(() => "?").join(",")})
+     ${mediaJoin} library_media_files AS media ON ${mediaConditions.join(" AND ")}
+     WHERE album.id IN (${ids.map(() => "?").join(",")})
      ${canonicalOrder}`,
-  ).iterate(...trackParameters);
+  ).iterate(...parameters);
   return buildLibraryFromRows(rows);
 }
 
@@ -555,29 +912,13 @@ export function getCanonicalLibrary({ source = null, availableOnly = false, favo
 
 const text = (value) => String(value || "").trim();
 
-const metadataGenres = (entity) => {
-  const metadata = entity?.metadata || {};
-  return [metadata.genres, metadata.genre, metadata.common?.genre, metadata.tags?.genre]
-    .flatMap((value) => (Array.isArray(value) ? value : [value]))
-    .map(text)
-    .filter(Boolean)
-    .filter((value, index, values) => values.indexOf(value) === index);
-};
-
-const addGenreStats = (stats, metadata, kind) => {
-  metadataGenres({ metadata }).forEach((genre) => {
-    const entry = stats.get(genre) || { name: genre, artists: 0, albums: 0, tracks: 0 };
-    entry[kind] += 1;
-    stats.set(genre, entry);
-  });
-};
-
 const pageNumber = (value) => Math.max(1, Number.parseInt(value, 10) || 1);
 
-const pageSize = (value) =>
-  Math.min(MAX_PAGE_SIZE, Math.max(1, Number.parseInt(value, 10) || DEFAULT_PAGE_SIZE));
+const pageSize = (value, max = MAX_PAGE_SIZE) =>
+  Math.min(max, Math.max(1, Number.parseInt(value, 10) || DEFAULT_PAGE_SIZE));
 
 const genreStatsCache = new Map();
+const GENRE_STATS_SETTING_PREFIX = "libraryGenreStats:";
 const GENRE_METADATA_PATHS = ["$.genres", "$.genre", "$.common.genre", "$.tags.genre"];
 
 const escapeLike = (value) => value.replace(/[\\%_]/g, "\\$&");
@@ -606,7 +947,7 @@ const recentMediaOrder = (kind, sourceFilter, availableOnly, direction) => {
     return `COALESCE((
       SELECT MAX(page_media.created_at)
       FROM library_album_tracks AS page_album_track
-      JOIN library_media_files AS page_media INDEXED BY idx_library_media_files_track_source_available
+      JOIN library_media_files AS page_media INDEXED BY idx_library_media_files_track_album_source_available
         ON page_media.track_id = page_album_track.track_id
       WHERE page_album_track.album_id = album.id
         AND ${albumMediaCondition("page_media", "page_album_track")}${mediaFilter}
@@ -614,12 +955,38 @@ const recentMediaOrder = (kind, sourceFilter, availableOnly, direction) => {
   }
   return `COALESCE((
     SELECT MAX(page_media.created_at)
-    FROM library_media_files AS page_media INDEXED BY idx_library_media_files_track_source_available
+    FROM library_media_files AS page_media INDEXED BY idx_library_media_files_track_album_source_available
     WHERE page_media.track_id = track.id${mediaFilter}
   ), 0) ${orderDirection}, track.title COLLATE NOCASE ${direction === "desc" ? "DESC" : "ASC"}`;
 };
 
 const pageMediaExists = (kind, sourceFilter, availableOnly) => {
+  if (!sourceFilter && availableOnly !== true) {
+    if (kind === "artists") {
+      return {
+        sql: `EXISTS (
+          SELECT 1
+          FROM library_albums AS page_album
+          JOIN library_album_tracks AS page_album_track ON page_album_track.album_id = page_album.id
+          JOIN library_tracks AS page_track ON page_track.id = page_album_track.track_id
+          WHERE page_album.artist_id = artist.id
+        )`,
+        parameters: [],
+      };
+    }
+    if (kind === "albums") {
+      return {
+        sql: `EXISTS (
+          SELECT 1
+          FROM library_album_tracks AS page_album_track
+          JOIN library_tracks AS page_track ON page_track.id = page_album_track.track_id
+          WHERE page_album_track.album_id = album.id
+        )`,
+        parameters: [],
+      };
+    }
+    return { sql: "1 = 1", parameters: [] };
+  }
   const { conditions, parameters } = mediaSourceClause(sourceFilter);
   if (availableOnly === true) conditions.push("page_media.available = 1");
   const conditionSql = conditions.length ? conditions.join(" AND ") : "1 = 1";
@@ -629,7 +996,7 @@ const pageMediaExists = (kind, sourceFilter, availableOnly) => {
         SELECT 1
         FROM library_albums AS page_album
         JOIN library_album_tracks AS page_album_track ON page_album_track.album_id = page_album.id
-        JOIN library_media_files AS page_media INDEXED BY idx_library_media_files_track_source_available
+        JOIN library_media_files AS page_media INDEXED BY idx_library_media_files_track_album_source_available
           ON page_media.track_id = page_album_track.track_id
         WHERE page_album.artist_id = artist.id
           AND ${albumMediaCondition("page_media", "page_album_track")}
@@ -643,7 +1010,7 @@ const pageMediaExists = (kind, sourceFilter, availableOnly) => {
       sql: `EXISTS (
         SELECT 1
         FROM library_album_tracks AS page_album_track
-        JOIN library_media_files AS page_media INDEXED BY idx_library_media_files_track_source_available
+        JOIN library_media_files AS page_media INDEXED BY idx_library_media_files_track_album_source_available
           ON page_media.track_id = page_album_track.track_id
         WHERE page_album_track.album_id = album.id
           AND ${albumMediaCondition("page_media", "page_album_track")}
@@ -654,7 +1021,7 @@ const pageMediaExists = (kind, sourceFilter, availableOnly) => {
   }
   return {
     sql: `EXISTS (
-      SELECT 1 FROM library_media_files AS page_media INDEXED BY idx_library_media_files_track_source_available
+      SELECT 1 FROM library_media_files AS page_media INDEXED BY idx_library_media_files_track_album_source_available
       WHERE page_media.track_id = track.id AND ${conditionSql}
     )`,
     parameters,
@@ -667,16 +1034,544 @@ const genrePredicate = (aliases, genre) => {
   aliases.forEach((alias) => {
     GENRE_METADATA_PATHS.forEach((path) => {
       clauses.push(
-        `EXISTS (
-          SELECT 1 FROM json_each(COALESCE(${alias}.metadata_json, '{}'), '${path}') AS genre_value
+        `(json_valid(${alias}.metadata_json) AND EXISTS (
+          SELECT 1 FROM json_each(${alias}.metadata_json, '${path}') AS genre_value
           WHERE lower(CAST(genre_value.value AS TEXT)) = lower(?)
-        )`,
+        ))`,
       );
       parameters.push(genre);
     });
   });
   return { sql: `(${clauses.join(" OR ")})`, parameters };
 };
+
+const pageLimit = (value, fallback = 10000) => {
+  if (value === null || value === undefined || value === "") return fallback;
+  return Math.min(10000, Math.max(0, Number.parseInt(value, 10) || 0));
+};
+
+const pageOffset = (value) => Math.max(0, Number.parseInt(value, 10) || 0);
+
+export function getCanonicalArtistPage({
+  source = null,
+  availableOnly = false,
+  query = "",
+  offset = 0,
+  limit = null,
+  includeStats = false,
+  searchMatch = null,
+  artistIds = null,
+} = {}) {
+  const sourceFilter = normalizeSource(source);
+  const media = pageMediaExists("artists", sourceFilter, availableOnly);
+  const conditions = [media.sql];
+  const parameters = [...media.parameters];
+  const normalizedQuery = text(query).toLocaleLowerCase();
+  if (normalizedQuery && !searchMatch) {
+    conditions.push("lower(artist.name) LIKE ? ESCAPE '\\'");
+    parameters.push(`%${escapeLike(normalizedQuery)}%`);
+  }
+  const boundedLimit = limit === null || limit === undefined || limit === ""
+    ? null
+    : pageLimit(limit);
+  const pageSql = boundedLimit === null ? "" : "LIMIT ? OFFSET ?";
+  const searchJoin = searchMatch
+    ? `JOIN library_search_documents AS search_document
+         ON search_document.entity_kind = 'artist' AND search_document.entity_id = artist.id
+       JOIN library_search_fts AS search_fts
+         ON search_fts.rowid = search_document.id AND library_search_fts MATCH ?`
+    : "";
+  if (searchMatch) {
+    parameters.unshift(searchMatch);
+    conditions.push("lower(search_document.title) LIKE ? ESCAPE '\\'");
+    parameters.push(`%${escapeLike(normalizedQuery)}%`);
+  }
+  const ids = Array.isArray(artistIds)
+    ? [...new Set(artistIds
+      .map((value) => Number(value))
+      .filter((value) => Number.isSafeInteger(value) && value > 0))]
+    : db.prepare(
+      `SELECT artist.id
+       FROM library_artists AS artist
+       ${searchJoin}
+       WHERE ${conditions.join(" AND ")}
+       ${searchMatch
+         ? "ORDER BY coalesce(artist.sort_name, artist.name) COLLATE NOCASE, artist.name COLLATE NOCASE, artist.id"
+         : "ORDER BY coalesce(artist.sort_name, artist.name) COLLATE NOCASE, artist.name COLLATE NOCASE, artist.id"}
+       ${pageSql}`,
+    ).all(...parameters, ...(boundedLimit === null ? [] : [boundedLimit, pageOffset(offset)])).map((row) => row.id);
+  if (!ids.length) return { artists: [], albums: [], tracks: [] };
+
+  if (!includeStats) {
+    const filterAlbums = Boolean(sourceFilter) || availableOnly === true;
+    const albumJoin = filterAlbums ? "JOIN" : "LEFT JOIN";
+    const albumFilter = filterAlbums
+      ? `AND EXISTS (
+          SELECT 1
+          FROM library_album_tracks AS album_track
+          JOIN library_media_files AS media
+            ON media.track_id = album_track.track_id
+            AND ${albumMediaCondition("media", "album_track")}
+          WHERE album_track.album_id = album.id
+            ${sourceFilter ? "AND media.source = ?" : ""}
+            ${availableOnly === true ? "AND media.available = 1" : ""}
+        )`
+      : "";
+    const rows = db.prepare(
+      `SELECT
+         artist.id AS artist_id,
+         artist.identity_key AS artist_identity_key,
+         artist.mbid AS artist_mbid,
+         artist.name AS artist_name,
+         artist.sort_name AS artist_sort_name,
+         artist.metadata_json AS artist_metadata_json,
+         COUNT(DISTINCT album.id) AS album_count
+       FROM library_artists AS artist
+       ${albumJoin} library_albums AS album ON album.artist_id = artist.id
+       WHERE artist.id IN (${ids.map(() => "?").join(",")})
+         ${albumFilter}
+       GROUP BY artist.id`,
+    ).all(...ids, ...(sourceFilter ? [sourceFilter] : []));
+    const byId = new Map(rows.map((row) => [row.artist_id, {
+      id: row.artist_id,
+      identityKey: row.artist_identity_key,
+      mbid: row.artist_mbid,
+      name: row.artist_name,
+      sortName: row.artist_sort_name,
+      metadata: parseJson(row.artist_metadata_json),
+      albumIds: [],
+      albumCount: Number(row.album_count || 0),
+      sources: [],
+      available: availableOnly === true,
+    }]));
+    return { artists: ids.map((id) => byId.get(id)).filter(Boolean), albums: [], tracks: [] };
+  }
+
+  const aggregateParameters = [];
+  const mediaConditions = [
+    "media.track_id = album_track.track_id",
+    albumMediaCondition("media", "album_track"),
+  ];
+  if (sourceFilter) {
+    mediaConditions.push("media.source = ?");
+    aggregateParameters.push(sourceFilter);
+  }
+  if (availableOnly === true) mediaConditions.push("media.available = 1");
+  const mediaJoin = sourceFilter || availableOnly === true ? "JOIN" : "LEFT JOIN";
+  aggregateParameters.push(...ids);
+  const rows = db.prepare(
+    `SELECT
+       artist.id AS artist_id,
+       artist.identity_key AS artist_identity_key,
+       artist.mbid AS artist_mbid,
+       artist.name AS artist_name,
+       artist.sort_name AS artist_sort_name,
+       artist.metadata_json AS artist_metadata_json,
+       COUNT(DISTINCT album.id) AS album_count,
+       COUNT(DISTINCT album_track.track_id) AS track_count,
+       COALESCE(SUM(media.size), 0) AS size_on_disk,
+       GROUP_CONCAT(DISTINCT media.source) AS sources,
+       MAX(media.available) AS available
+     FROM library_artists AS artist
+     JOIN library_albums AS album ON album.artist_id = artist.id
+     JOIN library_album_tracks AS album_track ON album_track.album_id = album.id
+     ${mediaJoin} library_media_files AS media ON ${mediaConditions.join(" AND ")}
+     WHERE artist.id IN (${ids.map(() => "?").join(",")})
+     GROUP BY artist.id
+     ORDER BY coalesce(artist.sort_name, artist.name) COLLATE NOCASE,
+       artist.name COLLATE NOCASE`,
+  ).all(...aggregateParameters);
+  const byId = new Map(rows.map((row) => [row.artist_id, {
+    id: row.artist_id,
+    identityKey: row.artist_identity_key,
+    mbid: row.artist_mbid,
+    name: row.artist_name,
+    sortName: row.artist_sort_name,
+    metadata: parseJson(row.artist_metadata_json),
+    albumIds: [],
+    albumCount: Number(row.album_count || 0),
+    trackCount: Number(row.track_count || 0),
+    sizeOnDisk: Number(row.size_on_disk || 0),
+    sources: parseSources(row.sources),
+    available: Boolean(row.available),
+  }]));
+  return { artists: ids.map((id) => byId.get(id)).filter(Boolean), albums: [], tracks: [] };
+}
+
+function albumGenrePredicate(genre) {
+  const direct = genrePredicate(["artist", "album"], genre);
+  const tracks = genrePredicate(["track"], genre);
+  return {
+    sql: `(${direct.sql} OR EXISTS (
+      SELECT 1
+      FROM library_album_tracks AS genre_album_track
+      JOIN library_tracks AS track ON track.id = genre_album_track.track_id
+      WHERE genre_album_track.album_id = album.id
+        AND ${tracks.sql}
+    ))`,
+    parameters: [...direct.parameters, ...tracks.parameters],
+  };
+}
+
+export function getCanonicalAlbumPage({
+  source = null,
+  availableOnly = false,
+  type = "alphabeticalByName",
+  genre = "",
+  fromYear = null,
+  toYear = null,
+  query = "",
+  artistId = null,
+  offset = 0,
+  limit = 20,
+  searchMatch = null,
+} = {}) {
+  const sourceFilter = normalizeSource(source);
+  const media = pageMediaExists("albums", sourceFilter, availableOnly);
+  const conditions = [media.sql];
+  const parameters = [...media.parameters];
+  const normalizedQuery = text(query).toLocaleLowerCase();
+  if (normalizedQuery && !searchMatch) {
+    const fields = ["album.title", "album.album_artist", "artist.name"];
+    const pattern = `%${escapeLike(normalizedQuery)}%`;
+    conditions.push(`(${fields.map((field) =>
+      `lower(coalesce(${field}, '')) LIKE ? ESCAPE '\\'`).join(" OR ")})`);
+    parameters.push(...fields.map(() => pattern));
+  }
+  if (artistId !== null && artistId !== undefined && String(artistId).trim()) {
+    conditions.push("album.artist_id = ?");
+    parameters.push(Number(artistId));
+  }
+  const normalizedGenre = text(genre);
+  if (normalizedGenre) {
+    const predicate = albumGenrePredicate(normalizedGenre);
+    conditions.push(predicate.sql);
+    parameters.push(...predicate.parameters);
+  }
+  const parsedFromYear = Number.parseInt(fromYear, 10);
+  const parsedToYear = Number.parseInt(toYear, 10);
+  const lowerYear = Number.isFinite(parsedFromYear) && Number.isFinite(parsedToYear)
+    ? Math.min(parsedFromYear, parsedToYear)
+    : parsedFromYear;
+  const upperYear = Number.isFinite(parsedFromYear) && Number.isFinite(parsedToYear)
+    ? Math.max(parsedFromYear, parsedToYear)
+    : parsedToYear;
+  if (Number.isFinite(lowerYear)) {
+    conditions.push("CAST(substr(COALESCE(album.release_date, ''), 1, 4) AS INTEGER) >= ?");
+    parameters.push(lowerYear);
+  }
+  if (Number.isFinite(upperYear)) {
+    conditions.push("CAST(substr(COALESCE(album.release_date, ''), 1, 4) AS INTEGER) <= ?");
+    parameters.push(upperYear);
+  }
+
+  let orderBy;
+  if (type === "random") {
+    orderBy = "random()";
+  } else if (type === "newest" || type === "recent") {
+    orderBy = recentMediaOrder("albums", sourceFilter, availableOnly, "asc");
+  } else if (type === "alphabeticalByArtist") {
+    orderBy = "coalesce(album.album_artist, artist.name) COLLATE NOCASE, album.title COLLATE NOCASE";
+  } else if (type === "byYear") {
+    orderBy = `CAST(substr(COALESCE(album.release_date, ''), 1, 4) AS INTEGER) ${Number.isFinite(parsedFromYear) && Number.isFinite(parsedToYear) && parsedFromYear > parsedToYear ? "DESC" : "ASC"}, album.title COLLATE NOCASE`;
+  } else if (type === "byGenre") {
+    orderBy = "coalesce(artist.name, album.album_artist) COLLATE NOCASE, album.title COLLATE NOCASE";
+  } else {
+    orderBy = "album.title COLLATE NOCASE, coalesce(album.album_artist, artist.name) COLLATE NOCASE";
+  }
+
+  const paginatedOrderBy = type === "random" ? orderBy : `${orderBy}, album.id`;
+  const boundedLimit = pageLimit(limit, 20);
+  if (boundedLimit === 0) return { artists: [], albums: [], tracks: [] };
+  const searchJoin = searchMatch
+    ? `JOIN library_search_documents AS search_document
+         ON search_document.entity_kind = 'album' AND search_document.entity_id = album.id
+       JOIN library_search_fts AS search_fts
+         ON search_fts.rowid = search_document.id AND library_search_fts MATCH ?`
+    : "";
+  if (searchMatch) {
+    parameters.unshift(searchMatch);
+    conditions.push("(lower(search_document.title) LIKE ? ESCAPE '\\' OR lower(search_document.artist_name) LIKE ? ESCAPE '\\')");
+    parameters.push(`%${escapeLike(normalizedQuery)}%`, `%${escapeLike(normalizedQuery)}%`);
+  }
+  const ids = db.prepare(
+    `SELECT album.id
+     FROM library_albums AS album
+     JOIN library_artists AS artist ON artist.id = album.artist_id
+     ${searchJoin}
+     WHERE ${conditions.join(" AND ")}
+     GROUP BY album.id
+     ORDER BY ${paginatedOrderBy}
+     LIMIT ? OFFSET ?`,
+  ).all(...parameters, boundedLimit, pageOffset(offset)).map((row) => row.id);
+  const library = getCanonicalLibraryForAlbumIds({ source: sourceFilter, availableOnly, ids });
+  const albumsById = new Map(library.albums.map((album) => [album.id, album]));
+  library.albums = ids.map((id) => albumsById.get(id)).filter(Boolean);
+  return library;
+}
+
+function getRandomTrackIds({ conditions, parameters, limit, offset }) {
+  const maximum = Number(db.prepare("SELECT max(id) AS maximum FROM library_tracks").get()?.maximum || 0);
+  if (!maximum) return [];
+  const needed = limit + offset;
+  const pivot = Math.floor(Math.random() * maximum) + 1;
+  const read = (operator, boundary, count) => db.prepare(
+    `SELECT track.id
+     FROM library_tracks AS track
+     WHERE ${conditions.join(" AND ")} AND track.id ${operator} ?
+     ORDER BY track.id
+     LIMIT ?`,
+  ).all(...parameters, boundary, count).map((row) => row.id);
+  const ids = read(">=", pivot, needed);
+  if (ids.length < needed) ids.push(...read("<", pivot, needed - ids.length));
+  return ids.slice(offset, offset + limit);
+}
+
+export function getCanonicalTrackPage({
+  source = null,
+  availableOnly = false,
+  query = "",
+  genre = "",
+  artist = "",
+  artistId = null,
+  albumId = null,
+  offset = 0,
+  limit = 20,
+  random = false,
+  searchMatch = null,
+} = {}) {
+  const sourceFilter = normalizeSource(source);
+  const media = pageMediaExists("tracks", sourceFilter, availableOnly);
+  const conditions = [media.sql];
+  const parameters = [...media.parameters];
+  const fields = [
+    "track.title",
+    "track.artist_name",
+    "album.title",
+    "album.album_artist",
+    "artist.name",
+  ];
+  const normalizedQuery = text(query).toLocaleLowerCase();
+  if (normalizedQuery && !searchMatch) {
+    const pattern = `%${escapeLike(normalizedQuery)}%`;
+    conditions.push(`(${fields.map((field) =>
+      `lower(coalesce(${field}, '')) LIKE ? ESCAPE '\\'`).join(" OR ")})`);
+    parameters.push(...fields.map(() => pattern));
+  }
+  const artistReference = text(artist);
+  const normalizedArtist = artistReference.toLocaleLowerCase();
+  if (normalizedArtist) {
+    conditions.push("(lower(artist.name) = ? OR lower(coalesce(track.artist_name, '')) = ? OR artist.identity_key = ?)");
+    parameters.push(normalizedArtist, normalizedArtist, artistReference);
+  }
+  if (artistId !== null && artistId !== undefined && String(artistId).trim()) {
+    conditions.push("artist.id = ?");
+    parameters.push(Number(artistId));
+  }
+  if (albumId !== null && albumId !== undefined && String(albumId).trim()) {
+    conditions.push("album.id = ?");
+    parameters.push(Number(albumId));
+  }
+  const normalizedGenre = text(genre);
+  if (normalizedGenre) {
+    const predicate = genrePredicate(["artist", "album", "track"], normalizedGenre);
+    conditions.push(predicate.sql);
+    parameters.push(...predicate.parameters);
+  }
+  const boundedLimit = pageLimit(limit, 20);
+  if (boundedLimit === 0) return { artists: [], albums: [], tracks: [] };
+  const useSearchIndex = Boolean(searchMatch)
+    && !artistReference
+    && !(artistId !== null && artistId !== undefined && String(artistId).trim())
+    && !(albumId !== null && albumId !== undefined && String(albumId).trim())
+    && !normalizedGenre;
+  if (useSearchIndex) {
+    const pattern = `%${escapeLike(normalizedQuery)}%`;
+    const searchConditions = [
+      ...conditions,
+      "(lower(search_document.title) LIKE ? ESCAPE '\\' OR lower(search_document.artist_name) LIKE ? ESCAPE '\\' OR lower(search_document.album_name) LIKE ? ESCAPE '\\')",
+    ];
+    const ids = db.prepare(
+      `SELECT track.id
+       FROM library_tracks AS track
+       JOIN library_search_documents AS search_document
+         ON search_document.entity_kind = 'track' AND search_document.entity_id = track.id
+       JOIN library_search_fts AS search_fts
+         ON search_fts.rowid = search_document.id AND library_search_fts MATCH ?
+       WHERE ${searchConditions.join(" AND ")}
+       ORDER BY track.id
+       LIMIT ? OFFSET ?`,
+    ).all(searchMatch, ...parameters, pattern, pattern, pattern, boundedLimit, pageOffset(offset))
+      .map((row) => row.id);
+    const library = getCanonicalLibraryForTrackIds({ source: sourceFilter, availableOnly, ids, albumId });
+    const tracksById = new Map(library.tracks.map((track) => [track.id, track]));
+    library.tracks = ids.map((id) => tracksById.get(id)).filter(Boolean);
+    return library;
+  }
+  if (random && !normalizedQuery && !artistReference && !normalizedGenre
+    && !(artistId !== null && artistId !== undefined && String(artistId).trim())
+    && !(albumId !== null && albumId !== undefined && String(albumId).trim())) {
+    const ids = getRandomTrackIds({
+      conditions,
+      parameters,
+      limit: boundedLimit,
+      offset: pageOffset(offset),
+    });
+    const library = getCanonicalLibraryForTrackIds({ source: sourceFilter, availableOnly, ids, albumId });
+    const tracksById = new Map(library.tracks.map((track) => [track.id, track]));
+    library.tracks = ids.map((id) => tracksById.get(id)).filter(Boolean);
+    return library;
+  }
+  const orderBy = random
+    ? "random()"
+    : "artist.sort_name COLLATE NOCASE, artist.name COLLATE NOCASE, album.title COLLATE NOCASE, album_track.disc_number, album_track.track_number, track.title COLLATE NOCASE";
+  const ids = db.prepare(
+    `SELECT track.id
+     FROM library_tracks AS track
+     JOIN library_album_tracks AS album_track ON album_track.track_id = track.id
+     JOIN library_albums AS album ON album.id = album_track.album_id
+     JOIN library_artists AS artist ON artist.id = album.artist_id
+     WHERE ${conditions.join(" AND ")}
+     GROUP BY track.id
+     ORDER BY ${orderBy}
+     LIMIT ? OFFSET ?`,
+  ).all(...parameters, boundedLimit, pageOffset(offset)).map((row) => row.id);
+  const library = getCanonicalLibraryForTrackIds({ source: sourceFilter, availableOnly, ids, albumId });
+  const tracksById = new Map(library.tracks.map((track) => [track.id, track]));
+  library.tracks = ids.map((id) => tracksById.get(id)).filter(Boolean);
+  return library;
+}
+
+export function getCanonicalSearchPage({
+  source = null,
+  availableOnly = false,
+  query = "",
+  artistLimit = 20,
+  artistOffset = 0,
+  albumLimit = 20,
+  albumOffset = 0,
+  songLimit = 20,
+  songOffset = 0,
+} = {}) {
+  const searchMatch = getLibrarySearchMatch(query);
+  const albumLibrary = getCanonicalAlbumPage({
+    source,
+    availableOnly,
+    query,
+    limit: albumLimit,
+    offset: albumOffset,
+    searchMatch,
+  });
+  const trackLibrary = getCanonicalTrackPage({
+    source,
+    availableOnly,
+    query,
+    limit: songLimit,
+    offset: songOffset,
+    searchMatch,
+  });
+  return {
+    artists: getCanonicalArtistPage({
+      source,
+      availableOnly,
+      query,
+      limit: artistLimit,
+      offset: artistOffset,
+      searchMatch,
+    }).artists,
+    albums: albumLibrary,
+    tracks: trackLibrary,
+  };
+}
+
+export function getCanonicalTopTracks({
+  source = null,
+  availableOnly = false,
+  artist,
+  limit = 20,
+} = {}) {
+  return getCanonicalTrackPage({ source, availableOnly, artist, limit });
+}
+
+export function getCanonicalGenres({ source = null, availableOnly = false } = {}) {
+  const sourceFilter = normalizeSource(source);
+  const mediaConditions = [
+    "media.track_id = album_track.track_id",
+    albumMediaCondition("media", "album_track"),
+  ];
+  const parameters = [];
+  if (sourceFilter) {
+    mediaConditions.push("media.source = ?");
+    parameters.push(sourceFilter);
+  }
+  if (availableOnly === true) mediaConditions.push("media.available = 1");
+  const genreRows = (column) => GENRE_METADATA_PATHS.map((path) => `
+    SELECT album_id, track_id, TRIM(CAST(genre_value.value AS TEXT)) AS genre
+    FROM eligible_tracks
+    JOIN json_each(
+      CASE WHEN json_valid(${column}) THEN ${column} ELSE '{}' END,
+      '${path}'
+    ) AS genre_value
+    WHERE json_valid(${column})
+      AND TRIM(CAST(genre_value.value AS TEXT)) <> ''`).join(" UNION ");
+  return db.prepare(
+    `WITH eligible_tracks AS MATERIALIZED (
+       SELECT DISTINCT
+         album.id AS album_id,
+         track.id AS track_id,
+         artist.metadata_json AS artist_metadata_json,
+         album.metadata_json AS album_metadata_json,
+         track.metadata_json AS track_metadata_json
+       FROM library_albums AS album
+       JOIN library_artists AS artist ON artist.id = album.artist_id
+       JOIN library_album_tracks AS album_track ON album_track.album_id = album.id
+       JOIN library_tracks AS track ON track.id = album_track.track_id
+       WHERE EXISTS (
+         SELECT 1
+         FROM library_media_files AS media
+         WHERE ${mediaConditions.join(" AND ")}
+       )
+     ),
+     direct_genres AS (
+       SELECT DISTINCT album_id, genre FROM (
+         ${genreRows("artist_metadata_json")}
+         UNION
+         ${genreRows("album_metadata_json")}
+       )
+     ),
+     track_genres AS (
+       SELECT DISTINCT album_id, track_id, genre FROM (
+         ${genreRows("track_metadata_json")}
+       )
+     ),
+     track_counts AS (
+       SELECT album_id, COUNT(*) AS song_count
+       FROM eligible_tracks
+       GROUP BY album_id
+     ),
+     album_genres AS (
+       SELECT direct.album_id, direct.genre, tracks.song_count
+       FROM direct_genres AS direct
+       JOIN track_counts AS tracks ON tracks.album_id = direct.album_id
+       UNION ALL
+       SELECT track.album_id, track.genre, COUNT(*) AS song_count
+       FROM track_genres AS track
+       WHERE NOT EXISTS (
+         SELECT 1 FROM direct_genres AS direct
+         WHERE direct.album_id = track.album_id AND direct.genre = track.genre
+       )
+       GROUP BY track.album_id, track.genre
+     )
+     SELECT genre AS value, COUNT(*) AS albumCount, SUM(song_count) AS songCount
+     FROM album_genres
+     GROUP BY genre
+     ORDER BY genre COLLATE NOCASE`,
+  ).all(...parameters).map((row) => ({
+    albumCount: Number(row.albumCount || 0),
+    songCount: Number(row.songCount || 0),
+    value: row.value,
+  }));
+}
 
 function buildPageQuery({
   kind,
@@ -694,12 +1589,16 @@ function buildPageQuery({
   const media = pageMediaExists(kind, sourceFilter, availableOnly);
   where.push(media.sql);
   parameters.push(...media.parameters);
+  const searchMatch = getLibrarySearchMatch(query);
 
   let from;
   let idExpression;
   let searchableFields;
   let genreAliases;
+  let entityKind;
+  let groupBy = null;
   if (kind === "artists") {
+    entityKind = "artist";
     from = "FROM library_artists AS artist";
     idExpression = "artist.id";
     searchableFields = ["artist.name"];
@@ -713,6 +1612,7 @@ function buildPageQuery({
       parameters.push(Number(albumId));
     }
   } else if (kind === "albums") {
+    entityKind = "album";
     from = "FROM library_albums AS album JOIN library_artists AS artist ON artist.id = album.artist_id";
     idExpression = "album.id";
     searchableFields = ["album.title", "album.album_artist", "artist.name"];
@@ -726,10 +1626,16 @@ function buildPageQuery({
       parameters.push(Number(albumId));
     }
   } else {
-    from = `FROM library_tracks AS track
-      JOIN library_album_tracks AS album_track ON album_track.track_id = track.id
-      JOIN library_albums AS album ON album.id = album_track.album_id
-      JOIN library_artists AS artist ON artist.id = album.artist_id`;
+    entityKind = "track";
+    const needsRelations = Boolean(artistId || albumId || genre || sort === "artist")
+      || Boolean(query && !searchMatch);
+    from = needsRelations
+      ? `FROM library_tracks AS track
+        JOIN library_album_tracks AS album_track ON album_track.track_id = track.id
+        JOIN library_albums AS album ON album.id = album_track.album_id
+        JOIN library_artists AS artist ON artist.id = album.artist_id`
+      : "FROM library_tracks AS track";
+    if (needsRelations) groupBy = "track.id";
     idExpression = "track.id";
     searchableFields = [
       "track.title",
@@ -749,7 +1655,29 @@ function buildPageQuery({
     }
   }
 
-  if (query) {
+  if (searchMatch) {
+    from += `
+      JOIN library_search_documents AS search_document
+        ON search_document.entity_kind = '${entityKind}'
+        AND search_document.entity_id = ${idExpression}
+      JOIN library_search_fts AS search_fts
+        ON search_fts.rowid = search_document.id
+        AND library_search_fts MATCH ?`;
+    parameters.unshift(searchMatch);
+    const pattern = `%${escapeLike(query)}%`;
+    const indexedFields = kind === "artists"
+      ? ["search_document.title"]
+      : kind === "albums"
+        ? ["search_document.title", "search_document.artist_name"]
+        : [
+            "search_document.title",
+            "search_document.artist_name",
+            "search_document.album_name",
+          ];
+    where.push(`(${indexedFields.map((field) =>
+      `lower(${field}) LIKE ? ESCAPE '\\'`).join(" OR ")})`);
+    parameters.push(...indexedFields.map(() => pattern));
+  } else if (query) {
     const pattern = `%${escapeLike(query)}%`;
     where.push(`(${searchableFields.map((field) =>
       `lower(coalesce(${field}, '')) LIKE ? ESCAPE '\\'`).join(" OR ")})`);
@@ -765,12 +1693,18 @@ function buildPageQuery({
   let orderBy;
   if (sort === "newest" && (kind === "albums" || kind === "tracks")) {
     orderBy = recentMediaOrder(kind, sourceFilter, availableOnly, direction);
+    if (kind === "albums") orderBy += ", album.id";
+    else orderBy += ", track.id";
   } else if (sort === "artist" && kind !== "artists") {
     orderBy = `artist.name COLLATE NOCASE ${orderDirection}, ${kind === "albums" ? "album.title" : "track.title"} COLLATE NOCASE ${orderDirection}`;
+    if (kind === "albums") orderBy += ", album.id";
+    else orderBy += ", track.id";
   } else if (kind === "artists") {
-    orderBy = `coalesce(artist.sort_name, artist.name) COLLATE NOCASE ${orderDirection}, artist.name COLLATE NOCASE ${orderDirection}`;
+    orderBy = `coalesce(artist.sort_name, artist.name) COLLATE NOCASE ${orderDirection}, artist.name COLLATE NOCASE ${orderDirection}, artist.id ${orderDirection}`;
   } else {
     orderBy = `${kind === "albums" ? "album.title" : "track.title"} COLLATE NOCASE ${orderDirection}`;
+    if (kind === "albums") orderBy += `, album.id ${orderDirection}`;
+    else orderBy += `, track.id ${orderDirection}`;
   }
 
   return {
@@ -779,6 +1713,7 @@ function buildPageQuery({
     where: where.join(" AND "),
     parameters,
     orderBy,
+    groupBy,
   };
 }
 
@@ -786,29 +1721,16 @@ function getCanonicalGenreStats({ sourceFilter, availableOnly }) {
   const cacheKey = `${sourceFilter || "all"}:${availableOnly === true ? "available" : "all"}`;
   const cached = genreStatsCache.get(cacheKey);
   if (cached) return cached;
-  const artistMedia = pageMediaExists("artists", sourceFilter, availableOnly);
-  const albumMedia = pageMediaExists("albums", sourceFilter, availableOnly);
-  const trackMedia = pageMediaExists("tracks", sourceFilter, availableOnly);
-  const stats = new Map();
-  for (const row of db.prepare(
-    `SELECT artist.metadata_json FROM library_artists AS artist WHERE ${artistMedia.sql}`,
-  ).iterate(...artistMedia.parameters)) {
-    addGenreStats(stats, parseJson(row.metadata_json), "artists");
+  const settingKey = `${GENRE_STATS_SETTING_PREFIX}${cacheKey}`;
+  const stored = db.prepare("SELECT value FROM settings WHERE key = ?").get(settingKey)?.value;
+  if (stored) {
+    const parsed = parseJson(stored);
+    if (Array.isArray(parsed)) {
+      genreStatsCache.set(cacheKey, parsed);
+      return parsed;
+    }
   }
-  for (const row of db.prepare(
-    `SELECT album.metadata_json
-     FROM library_albums AS album
-     JOIN library_artists AS artist ON artist.id = album.artist_id
-     WHERE ${albumMedia.sql}`,
-  ).iterate(...albumMedia.parameters)) {
-    addGenreStats(stats, parseJson(row.metadata_json), "albums");
-  }
-  for (const row of db.prepare(
-    `SELECT track.metadata_json FROM library_tracks AS track WHERE ${trackMedia.sql}`,
-  ).iterate(...trackMedia.parameters)) {
-    addGenreStats(stats, parseJson(row.metadata_json), "tracks");
-  }
-  const sortedStats = [...stats.values()].sort((left, right) => left.name.localeCompare(right.name));
+  const sortedStats = computeLibraryGenreStats(db, { sourceFilter, availableOnly });
   genreStatsCache.set(cacheKey, sortedStats);
   return sortedStats;
 }
@@ -838,7 +1760,7 @@ function getPageLibrary(kind, ids, sourceFilter, availableOnly, albumId = null) 
   return buildLibraryFromRows(rows);
 }
 
-function getAlbumTrackLibrary(
+function buildAlbumTrackPageQuery(
   albumId,
   sourceFilter,
   { query = "", genre = "", sort = "album", direction = "asc", artistId = null } = {},
@@ -883,6 +1805,97 @@ function getAlbumTrackLibrary(
     : sort === "artist"
       ? `artist.name COLLATE NOCASE ${orderDirection}, track.title COLLATE NOCASE ${orderDirection}`
       : `track.title COLLATE NOCASE ${orderDirection}`;
+  return {
+    from: `FROM library_tracks AS track
+      JOIN library_album_tracks AS album_track ON album_track.track_id = track.id
+      JOIN library_albums AS album ON album.id = album_track.album_id
+      JOIN library_artists AS artist ON artist.id = album.artist_id
+      LEFT JOIN library_media_files AS media ON ${mediaConditions.join(" AND ")}`,
+    where: conditions.join(" AND "),
+    parameters,
+    orderBy,
+  };
+}
+
+function getAlbumTrackSummary(albumId, sourceFilter) {
+  const mediaConditions = [
+    "media.track_id = album_track.track_id",
+    albumMediaCondition("media", "album_track"),
+  ];
+  const parameters = [];
+  if (sourceFilter) {
+    mediaConditions.push("media.source = ?");
+    parameters.push(sourceFilter);
+  }
+  parameters.push(Number(albumId));
+  const row = db.prepare(
+    `SELECT
+       artist.id AS artist_id,
+       artist.identity_key AS artist_identity_key,
+       artist.mbid AS artist_mbid,
+       artist.name AS artist_name,
+       artist.sort_name AS artist_sort_name,
+       artist.metadata_json AS artist_metadata_json,
+       album.id AS album_id,
+       album.identity_key AS album_identity_key,
+       album.mbid AS album_mbid,
+       album.release_group_mbid AS album_release_group_mbid,
+       album.title AS album_title,
+       album.album_artist AS album_artist,
+       album.release_date AS album_release_date,
+       album.metadata_json AS album_metadata_json,
+       GROUP_CONCAT(DISTINCT media.source) AS sources,
+       MAX(media.available) AS available
+     FROM library_albums AS album
+     JOIN library_artists AS artist ON artist.id = album.artist_id
+     JOIN library_album_tracks AS album_track ON album_track.album_id = album.id
+     LEFT JOIN library_media_files AS media ON ${mediaConditions.join(" AND ")}
+     WHERE album.id = ?
+     GROUP BY album.id`,
+  ).get(...parameters);
+  if (!row) return { artist: null, album: null };
+  const sources = parseSources(row.sources);
+  return {
+    artist: {
+      id: row.artist_id,
+      identityKey: row.artist_identity_key,
+      mbid: row.artist_mbid,
+      name: row.artist_name,
+      sortName: row.artist_sort_name,
+      metadata: parseJson(row.artist_metadata_json),
+      albumIds: [row.album_id],
+      sources,
+      available: Boolean(row.available),
+    },
+    album: {
+      id: row.album_id,
+      identityKey: row.album_identity_key,
+      mbid: row.album_mbid,
+      releaseGroupMbid: row.album_release_group_mbid,
+      artistId: row.artist_id,
+      title: row.album_title,
+      albumArtist: row.album_artist,
+      releaseDate: row.album_release_date,
+      metadata: parseJson(row.album_metadata_json),
+      trackIds: [],
+      sources,
+      available: Boolean(row.available),
+    },
+  };
+}
+
+function getAlbumTrackPageLibrary(albumId, sourceFilter, ids) {
+  if (!ids.length) return { artists: [], albums: [], tracks: [] };
+  const mediaConditions = [
+    "media.track_id = album_track.track_id",
+    albumMediaCondition("media", "album_track"),
+  ];
+  const parameters = [];
+  if (sourceFilter) {
+    mediaConditions.push("media.source = ?");
+    parameters.push(sourceFilter);
+  }
+  parameters.push(Number(albumId), ...ids);
   const rows = db.prepare(
     `${CANONICAL_SELECT}
      FROM library_tracks AS track
@@ -890,38 +1903,55 @@ function getAlbumTrackLibrary(
      JOIN library_albums AS album ON album.id = album_track.album_id
      JOIN library_artists AS artist ON artist.id = album.artist_id
      LEFT JOIN library_media_files AS media ON ${mediaConditions.join(" AND ")}
-     WHERE ${conditions.join(" AND ")}
-     ORDER BY ${orderBy}, album_track.disc_number, album_track.track_number,
-       media.path COLLATE NOCASE`,
+     WHERE album.id = ? AND track.id IN (${ids.map(() => "?").join(",")})
+     ORDER BY album_track.disc_number, album_track.track_number,
+       track.title COLLATE NOCASE, media.path COLLATE NOCASE`,
   ).iterate(...parameters);
   return buildLibraryFromRows(rows);
 }
 
 function getAlbumTrackPage(albumId, sourceFilter, page, currentPageSize, options = {}) {
-  const completeLibrary = getAlbumTrackLibrary(albumId, sourceFilter);
-  const library = getAlbumTrackLibrary(albumId, sourceFilter, options);
-  const album = completeLibrary.albums[0] || null;
-  const artist = album
-    ? completeLibrary.artists.find((candidate) => candidate.id === album.artistId) || null
-    : null;
-  const tracks = library.tracks;
-  const availableTrackCount = completeLibrary.tracks.filter((track) => track.available).length;
-  const pageItems = tracks.slice((page - 1) * currentPageSize, page * currentPageSize);
+  const queryDefinition = buildAlbumTrackPageQuery(albumId, sourceFilter, options);
+  const total = Number(db.prepare(
+    `SELECT COUNT(DISTINCT track.id) AS total
+     ${queryDefinition.from}
+     WHERE ${queryDefinition.where}`,
+  ).get(...queryDefinition.parameters)?.total || 0);
+  const pageIds = db.prepare(
+    `SELECT track.id AS page_id
+     ${queryDefinition.from}
+     WHERE ${queryDefinition.where}
+     GROUP BY track.id
+     ORDER BY ${queryDefinition.orderBy}, album_track.disc_number, album_track.track_number,
+       media.path COLLATE NOCASE
+     LIMIT ? OFFSET ?`,
+  ).all(
+    ...queryDefinition.parameters,
+    currentPageSize,
+    (page - 1) * currentPageSize,
+  ).map((row) => row.page_id);
+  const library = getAlbumTrackPageLibrary(albumId, sourceFilter, pageIds);
+  const tracksById = new Map(library.tracks.map((track) => [track.id, track]));
+  const pageItems = pageIds.map((id) => tracksById.get(id)).filter(Boolean);
+  const summary = getAlbumTrackSummary(albumId, sourceFilter);
+  const stats = getAlbumStats([Number(albumId)], sourceFilter).get(String(albumId));
+  const album = summary.album;
   const albums = album
     ? [{
         ...album,
-        trackCount: tracks.length,
-        availableTrackCount,
+        trackIds: pageItems.map((track) => track.id),
+        trackCount: total,
+        availableTrackCount: stats?.availableTrackCount ?? 0,
       }]
     : [];
   return {
     kind: "tracks",
     page,
     pageSize: currentPageSize,
-    total: tracks.length,
-    hasMore: page * currentPageSize < tracks.length,
+    total,
+    hasMore: page * currentPageSize < total,
     items: pageItems,
-    artists: artist ? [artist] : [],
+    artists: summary.artist ? [summary.artist] : [],
     albums,
     tracks: pageItems,
     genres: getCanonicalGenreStats({ sourceFilter, availableOnly: false }),
@@ -964,6 +1994,7 @@ export function getCanonicalLibraryPage({
   kind = "albums",
   page = 1,
   pageSize: requestedPageSize = DEFAULT_PAGE_SIZE,
+  offset = null,
   query = "",
   genre = "",
   sort = null,
@@ -983,7 +2014,13 @@ export function getCanonicalLibraryPage({
     text(sort).toLocaleLowerCase() ||
     (normalizedKind === "tracks" && albumId ? "album" : "name");
   const currentPage = pageNumber(page);
-  const currentPageSize = pageSize(requestedPageSize);
+  const currentPageSize = pageSize(
+    requestedPageSize,
+    normalizedKind === "artists" ? MAX_ARTIST_PROJECTION_PAGE_SIZE : MAX_PAGE_SIZE,
+  );
+  const currentOffset = offset == null
+    ? (currentPage - 1) * currentPageSize
+    : Math.max(0, Number.parseInt(offset, 10) || 0);
 
   if (normalizedKind === "genres") {
     let collection = getCanonicalGenreStats({ sourceFilter, availableOnly });
@@ -1042,14 +2079,36 @@ export function getCanonicalLibraryPage({
     `SELECT ${queryDefinition.idExpression} AS page_id
      ${queryDefinition.from}
      WHERE ${queryDefinition.where}
-     GROUP BY ${queryDefinition.idExpression}
+     ${queryDefinition.groupBy ? `GROUP BY ${queryDefinition.groupBy}` : ""}
      ORDER BY ${queryDefinition.orderBy}
      LIMIT ? OFFSET ?`,
   ).all(
     ...queryDefinition.parameters,
     currentPageSize,
-    (currentPage - 1) * currentPageSize,
+    currentOffset,
   ).map((row) => row.page_id);
+  if (normalizedKind === "artists") {
+    const library = getCanonicalArtistPage({
+      source: sourceFilter,
+      availableOnly,
+      artistIds: ids,
+      includeStats: true,
+    });
+    const artistsById = new Map(library.artists.map((artist) => [String(artist.id), artist]));
+    const items = ids.map((id) => artistsById.get(String(id))).filter(Boolean);
+    return {
+      kind: normalizedKind,
+      page: currentPage,
+      pageSize: currentPageSize,
+      total,
+      hasMore: currentPage * currentPageSize < total,
+      items,
+      artists: items,
+      albums: [],
+      tracks: [],
+      genres: getCanonicalGenreStats({ sourceFilter, availableOnly }),
+    };
+  }
   const library = getPageLibrary(normalizedKind, ids, sourceFilter, availableOnly, albumId);
   const artistsById = new Map(library.artists.map((artist) => [String(artist.id), artist]));
   const albumsById = new Map(library.albums.map((album) => [String(album.id), album]));
@@ -1100,9 +2159,18 @@ export function getCanonicalLibraryPage({
   };
 }
 
-export function invalidateCanonicalLibraryCache() {
+export function rebuildCanonicalGenreStats() {
+  db.prepare("DELETE FROM settings WHERE key LIKE ?").run(`${GENRE_STATS_SETTING_PREFIX}%`);
+  genreStatsCache.clear();
+  rebuildStoredLibraryGenreStats(db);
+}
+
+export function invalidateCanonicalLibraryCache({ persistedGenres = true } = {}) {
   libraryCache.clear();
   genreStatsCache.clear();
+  if (persistedGenres) {
+    db.prepare("DELETE FROM settings WHERE key LIKE ?").run(`${GENRE_STATS_SETTING_PREFIX}%`);
+  }
 }
 
 export { normalizeSource };

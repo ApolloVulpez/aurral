@@ -1,6 +1,6 @@
 import { dbOps } from "../../db/helpers/index.js";
 import { getLastfmApiKey } from "../apiClients/index.js";
-import { libraryManager } from "../libraryManager.js";
+import { getCanonicalArtistProjection } from "../libraryQueryService.js";
 import {
   enqueueDiscoveryRefreshJob,
   getHonkerDb,
@@ -143,21 +143,23 @@ export function markDiscoveryRefreshDequeued() {
 export async function isDiscoveryRefreshConfigured() {
   const hasLastfm = !!getLastfmApiKey();
   if (hasLastfm) return true;
-  const libraryArtists = await libraryManager.getAllArtists();
-  return libraryArtists.length > 0;
+  return getCanonicalArtistProjection({ page: 1, pageSize: 1 }).length > 0;
 }
 
 export function discoveryNeedsRefresh(cache = getDiscoveryCache()) {
   const lastUpdated = cache?.lastUpdated;
   const hasRecommendations =
     Array.isArray(cache?.recommendations) && cache.recommendations.length > 0;
+  const hasGlobalTop =
+    Array.isArray(cache?.globalTop) && cache.globalTop.length > 0;
   const hasGenres = Array.isArray(cache?.topGenres) && cache.topGenres.length > 0;
   const refreshHours = getDiscoveryAutoRefreshHours();
   const staleCutoff = Date.now() - refreshHours * 60 * 60 * 1000;
+  const lastUpdatedAt = new Date(lastUpdated || "").getTime();
   return (
-    !lastUpdated ||
-    new Date(lastUpdated).getTime() < staleCutoff ||
-    !hasRecommendations ||
+    !Number.isFinite(lastUpdatedAt) ||
+    lastUpdatedAt < staleCutoff ||
+    (!hasRecommendations && !hasGlobalTop) ||
     !hasGenres
   );
 }
@@ -286,16 +288,6 @@ export async function bootstrapDiscoveryRefresh() {
   const result = await enqueueDiscoveryRefreshIfNeeded({ reason: "startup" });
   if (result.reason === "fresh") {
     const latest = getDiscoveryCache();
-    if (
-      (!latest.recommendations?.length && !latest.globalTop?.length) ||
-      !latest.topGenres?.length
-    ) {
-      const retry = enqueueDiscoveryRefresh({ reason: "startup_incomplete" });
-      if (retry.enqueued) {
-        console.log("Discovery cache timestamp exists but data is incomplete. Re-queued refresh.");
-      }
-      return;
-    }
     console.log(
       `Discovery cache is fresh (last updated ${latest.lastUpdated}). Scheduling next refresh.`,
     );

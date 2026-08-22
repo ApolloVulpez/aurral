@@ -45,7 +45,7 @@ Options:
   --tracks-per-album N        Synthetic tracks per album, default 10
   --repeats N                 Page samples per cold/warm group, default 3
   --indexer-albums N          Albums in the Lidarr call probe, default 1000
-  --full-read-timeout-ms N    Timeout for full-read child probes, default 30000
+  --child-probe-timeout-ms N  Timeout for child probes, default 30000
   --child-heap-mb N           Child heap cap in megabytes, default 2048
   --output PATH               JSON result path, default perf-results/library-<timestamp>.json
   --check                     Exit nonzero when the regression gate fails
@@ -62,9 +62,9 @@ Options:
     readOption(args, "indexer-albums", 1000),
     "indexer-albums",
   );
-  const fullReadTimeoutMs = positiveInteger(
-    readOption(args, "full-read-timeout-ms", 30000),
-    "full-read-timeout-ms",
+  const childProbeTimeoutMs = positiveInteger(
+    readOption(args, "child-probe-timeout-ms", 30000),
+    "child-probe-timeout-ms",
   );
   const childHeapMb = positiveInteger(readOption(args, "child-heap-mb", 2048), "child-heap-mb");
   const output = readOption(
@@ -77,7 +77,7 @@ Options:
     tracksPerAlbum,
     repeats,
     indexerAlbums,
-    fullReadTimeoutMs,
+    childProbeTimeoutMs,
     childHeapMb,
     output: path.isAbsolute(output) ? output : path.join(repoRoot, output),
     check: args.includes("--check"),
@@ -111,12 +111,15 @@ function measure(operation) {
   const started = performance.now();
   const value = operation();
   const elapsedMs = performance.now() - started;
+  const serialized = JSON.stringify(value);
   const after = memoryStats();
   return {
     elapsedMs: Number(elapsedMs.toFixed(3)),
+    jsonBytes: Buffer.byteLength(serialized),
     memoryBefore: before,
     memoryAfter: after,
     rssDeltaBytes: after.rssBytes - before.rssBytes,
+    heapDeltaBytes: after.heapUsedBytes - before.heapUsedBytes,
     value,
   };
 }
@@ -130,6 +133,10 @@ function pageSummary(page) {
     itemCount: Array.isArray(page.items) ? page.items.length : 0,
     genreCount: Array.isArray(page.genres) ? page.genres.length : 0,
   };
+}
+
+function artistProjectionSummary(artists) {
+  return { itemCount: artists.length };
 }
 
 function seedDatabase(database, { tracks, tracksPerAlbum }) {
@@ -244,6 +251,19 @@ function seedDatabase(database, { tracks, tracksPerAlbum }) {
   };
 }
 
+function seedSubsonicFavorite(database) {
+  const now = Date.now();
+  const userId = Number(database.prepare(
+    `INSERT INTO users (username, password_hash, role, permissions)
+     VALUES ('benchmark', 'benchmark', 'user', '{"accessFlow":true}')`,
+  ).run().lastInsertRowid);
+  database.prepare(
+    `INSERT INTO subsonic_stars (user_id, entity_kind, entity_key, created_at)
+     VALUES (?, 'song', 'benchmark:track:0', ?)`,
+  ).run(userId, now);
+  return { id: userId, username: "benchmark", permissions: { accessFlow: true } };
+}
+
 function collectPageSamples(getPage, invalidate, repeats) {
   const coldSamples = [];
   const warmSamples = [];
@@ -338,53 +358,120 @@ function runChild({ dataDir, dbPath, code, timeoutMs, heapMb, env = {} }) {
   });
 }
 
-const fullReadCode = `
-import { performance } from "node:perf_hooks";
-import { getCanonicalLibrary } from "./backend/services/libraryQueryService.js";
-import { getCanonicalLibraryReadModel } from "./backend/services/canonicalLibraryReadAdapter.js";
+const boundedReadCode = `
+import { groupArtists } from "./backend/routes/subsonic.js";
 import {
-  buildPublicLibrary,
-  publicLibraryJsonReplacer,
-} from "./backend/routes/library/handlers/canonical.js";
+  getAlbum,
+  getFlowPlaylists,
+  getStarred,
+  getArtist,
+  listArtists,
+  searchLibrary,
+} from "./backend/services/subsonicLibraryService.js";
+import { getCanonicalTrackPage } from "./backend/services/libraryQueryService.js";
 
-const mode = process.env.AURRAL_BENCHMARK_MODE;
-let value;
-let rawReadMs = 0;
-let transformMs = 0;
-if (mode === "legacy-adapter") {
-  const started = performance.now();
-  value = getCanonicalLibraryReadModel({ source: "lidarr", availableOnly: true });
-  rawReadMs = performance.now() - started;
-} else {
-  const rawStarted = performance.now();
-  const raw = getCanonicalLibrary({ source: "lidarr", availableOnly: true });
-  rawReadMs = performance.now() - rawStarted;
-  const transformStarted = performance.now();
-  value = buildPublicLibrary(raw);
-  transformMs = performance.now() - transformStarted;
-}
-const readMs = rawReadMs + transformMs;
-const serializeStarted = performance.now();
-const jsonReplacer = mode === "full-endpoint" ? publicLibraryJsonReplacer : undefined;
-const jsonBytes = Buffer.byteLength(JSON.stringify(value, jsonReplacer));
-const serializeMs = performance.now() - serializeStarted;
-const memory = process.memoryUsage();
-const counts = {
-  artists: Array.isArray(value.artists) ? value.artists.length : 0,
-  albums: Array.isArray(value.albums) ? value.albums.length : 0,
-  tracks: Array.isArray(value.tracks) ? value.tracks.length : 0,
+const user = {
+  id: Number(process.env.AURRAL_BENCHMARK_USER_ID),
+  username: "benchmark",
+  permissions: { accessFlow: true },
 };
+const encodedId = (kind, key) => kind + ":" + encodeURIComponent(key);
+const operation = process.env.AURRAL_BENCHMARK_OPERATION;
+const read = {
+  getIndexes: () => ({ index: groupArtists(listArtists()) }),
+  getArtist: () => getArtist(encodedId("artist", "benchmark:artist:0")),
+  getAlbum: () => getAlbum(encodedId("album", "benchmark:album:0")),
+  search3: () => searchLibrary("Benchmark Track", {
+    artistCount: "20",
+    albumCount: "20",
+    songCount: "20",
+  }),
+  randomSongs: () => getCanonicalTrackPage({
+    source: "lidarr",
+    availableOnly: true,
+    random: true,
+    limit: 20,
+  }).tracks,
+  starred: () => getStarred(user),
+  playlists: () => getFlowPlaylists(user),
+};
+const before = process.memoryUsage();
+const started = performance.now();
+const value = read[operation]();
+const elapsedMs = performance.now() - started;
+const serialized = JSON.stringify(value);
+const after = process.memoryUsage();
+const arrayCount = (target, key) => Array.isArray(target?.[key]) ? target[key].length : 0;
+const indexArtistCount = Array.isArray(value?.index)
+  ? value.index.reduce((total, group) => total + arrayCount(group, "artist"), 0)
+  : 0;
+const counts = {
+  getIndexes: { artists: indexArtistCount },
+  getArtist: { albums: arrayCount(value, "album") },
+  getAlbum: { songs: arrayCount(value, "song") },
+  search3: {
+    artists: arrayCount(value, "artist"),
+    albums: arrayCount(value, "album"),
+    songs: arrayCount(value, "song"),
+  },
+  randomSongs: { items: Array.isArray(value) ? value.length : 0 },
+  starred: {
+    artists: arrayCount(value, "artist"),
+    albums: arrayCount(value, "album"),
+    songs: arrayCount(value, "song"),
+  },
+  playlists: { items: Array.isArray(value) ? value.length : 0 },
+}[operation] || {};
 console.log(JSON.stringify({
-  rawReadMs: Number(rawReadMs.toFixed(3)),
-  transformMs: Number(transformMs.toFixed(3)),
-  readMs: Number(readMs.toFixed(3)),
-  serializeMs: Number(serializeMs.toFixed(3)),
-  jsonBytes,
+  elapsedMs: Number(elapsedMs.toFixed(3)),
+  jsonBytes: Buffer.byteLength(serialized),
+  rssDeltaBytes: after.rss - before.rss,
+  heapDeltaBytes: after.heapUsed - before.heapUsed,
+  rssBytes: after.rss,
+  heapUsedBytes: after.heapUsed,
   counts,
-  rssBytes: memory.rss,
-  heapUsedBytes: memory.heapUsed,
 }));
 `;
+
+function summarizeReadSamples(samples) {
+  const completed = samples.filter((sample) => sample.status === "completed");
+  const statisticsComplete = samples.length > 0
+    && completed.length === samples.length
+    && completed.every((sample) => [
+      sample.elapsedMs,
+      sample.jsonBytes,
+      sample.rssDeltaBytes,
+      sample.heapDeltaBytes,
+    ].every(Number.isFinite));
+  const values = statisticsComplete
+    ? completed.map((sample) => sample.elapsedMs).sort((a, b) => a - b)
+    : [];
+  const percentile = (fraction) => values[Math.min(values.length - 1, Math.ceil(values.length * fraction) - 1)];
+  const itemTotal = (sample) => Object.values(sample.counts || {})
+    .reduce((total, count) => total + (Number.isFinite(Number(count)) ? Number(count) : 0), 0);
+  return {
+    samples,
+    sampleCount: samples.length,
+    completedCount: completed.length,
+    statisticsComplete,
+    nonVacuous: samples.length > 0
+      && completed.length === samples.length
+      && completed.every((sample) => itemTotal(sample) > 0),
+    responseBytes: statisticsComplete ? [...new Set(completed.map((sample) => sample.jsonBytes))] : [],
+    medianMs: statisticsComplete ? percentile(0.5) : null,
+    p95Ms: statisticsComplete ? percentile(0.95) : null,
+    maxRssDeltaBytes: statisticsComplete
+      ? Math.max(...completed.map((sample) => sample.rssDeltaBytes))
+      : null,
+    maxHeapDeltaBytes: statisticsComplete
+      ? Math.max(...completed.map((sample) => sample.heapDeltaBytes))
+      : null,
+  };
+}
+
+function isFiniteBelow(value, limit) {
+  return Number.isFinite(value) && value < limit;
+}
 
 const indexerProbeCode = `
 import { performance } from "node:perf_hooks";
@@ -484,8 +571,20 @@ async function main() {
     const imported = await import("../backend/config/db-sqlite.js");
     database = imported.db;
     const queryService = await import("../backend/services/libraryQueryService.js");
+    const { rebuildLibrarySearchIndex } = await import("../backend/services/librarySearchIndex.js");
+    const { flowPlaylistConfig } = await import(
+      "../backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js"
+    );
     const seedStarted = performance.now();
     const seed = seedDatabase(database, options);
+    rebuildLibrarySearchIndex();
+    queryService.rebuildCanonicalGenreStats();
+    const benchmarkUser = seedSubsonicFavorite(database);
+    flowPlaylistConfig.createSharedPlaylist({
+      name: "Benchmark Playlist",
+      ownerUserId: benchmarkUser.id,
+      tracks: [],
+    });
     const seedElapsedMs = Number((performance.now() - seedStarted).toFixed(3));
     const pageCases = [
       ["artists", { kind: "artists", page: 1, pageSize: 100 }],
@@ -498,22 +597,57 @@ async function main() {
     for (const [name, pageOptions] of pageCases) {
       pages[name] = collectPageSamples(
         () => queryService.getCanonicalLibraryPage(pageOptions),
-        queryService.invalidateCanonicalLibraryCache,
+        () => queryService.invalidateCanonicalLibraryCache({ persistedGenres: false }),
         options.repeats,
       );
     }
+    const artistProjectionCold = measure(
+      () => queryService.getCanonicalArtistProjection({ page: 1, pageSize: 100 }),
+    );
+    const artistProjectionSamples = [];
+    for (let index = 0; index < options.repeats; index += 1) {
+      artistProjectionSamples.push(
+        measure(() => queryService.getCanonicalArtistProjection({ page: 1, pageSize: 100 })),
+      );
+    }
+    const stripProjection = ({ value: _value, ...sample }) => sample;
+    pages["artist-projection"] = {
+      shape: artistProjectionSummary(artistProjectionCold.value),
+      cold: summarizeSamples([stripProjection(artistProjectionCold)]),
+      warm: summarizeSamples(artistProjectionSamples.map(stripProjection)),
+    };
+    const artistProjectionPlan = queryService.getCanonicalArtistProjectionQueryPlan({
+      page: 1,
+      pageSize: 100,
+    });
+    const artistProjectionPlanDetails = artistProjectionPlan.map((row) => String(row.detail || ""));
     database.close();
     database = null;
-    const fullReads = {};
-    for (const mode of ["full-endpoint", "legacy-adapter"]) {
-      fullReads[mode] = await runChild({
-        dataDir,
-        dbPath,
-        timeoutMs: options.fullReadTimeoutMs,
-        heapMb: options.childHeapMb,
-        code: fullReadCode,
-        env: { AURRAL_BENCHMARK_MODE: mode },
-      });
+    const subsonicReads = {};
+    for (const operation of [
+      "getIndexes",
+      "getArtist",
+      "getAlbum",
+      "search3",
+      "randomSongs",
+      "starred",
+      "playlists",
+    ]) {
+      const samples = [];
+      for (let index = 0; index < options.repeats; index += 1) {
+        samples.push(await runChild({
+          dataDir,
+          dbPath,
+          timeoutMs: options.childProbeTimeoutMs,
+          heapMb: options.childHeapMb,
+          code: boundedReadCode,
+          env: {
+            AURRAL_BENCHMARK_OPERATION: operation,
+            AURRAL_BENCHMARK_USER_ID: String(benchmarkUser.id),
+          },
+        }));
+      }
+      subsonicReads[operation] = summarizeReadSamples(samples);
     }
     const indexerProbes = {};
     for (const [mode, probeDir] of [
@@ -523,7 +657,7 @@ async function main() {
       indexerProbes[mode] = await runChild({
         dataDir: probeDir,
         dbPath: path.join(probeDir, "aurral.db"),
-        timeoutMs: options.fullReadTimeoutMs,
+        timeoutMs: options.childProbeTimeoutMs,
         heapMb: options.childHeapMb,
         code: indexerProbeCode,
         env: {
@@ -534,13 +668,43 @@ async function main() {
     }
     const expectedBulkIndexerCalls = 5;
     const expectedFallbackIndexerCalls = 5;
-    const adapter = fullReads["legacy-adapter"];
-    const pageP95 = Object.fromEntries(
-      Object.entries(pages).map(([name, value]) => [name, value.warm.p95Ms]),
-    );
+    const measuredReadNames = ["search3", "randomSongs"];
+    const measuredReads = measuredReadNames.map((name) => subsonicReads[name]);
+    const measuredQueryChecks = {
+      nonVacuousCompletedSamples: measuredReads.every((read) => read.nonVacuous),
+      coldP95Under750ms: measuredReads.every((read) => isFiniteBelow(read.p95Ms, 750)),
+      responseUnder2MiB: measuredReads.every((read) =>
+        read.responseBytes.length > 0
+        && read.responseBytes.every((bytes) => isFiniteBelow(bytes, 2 * 1024 * 1024))),
+      maxRssDeltaUnder64MiB: measuredReads.every((read) =>
+        isFiniteBelow(read.maxRssDeltaBytes, 64 * 1024 * 1024)),
+    };
+    const pageBudgetChecks = {
+      warmP95Under250ms: Object.values(pages).every((page) =>
+        isFiniteBelow(page.warm.p95Ms, 250)),
+      coldP95Under750ms: Object.values(pages).every((page) =>
+        isFiniteBelow(page.cold.p95Ms, 750)),
+      responseUnder2MiB: Object.values(pages).every((page) =>
+        [...page.cold.samples, ...page.warm.samples]
+          .every((sample) => isFiniteBelow(sample.jsonBytes, 2 * 1024 * 1024))),
+      maxRssDeltaUnder64MiB: Object.values(pages).every((page) =>
+        [...page.cold.samples, ...page.warm.samples]
+          .every((sample) => isFiniteBelow(sample.rssDeltaBytes, 64 * 1024 * 1024))),
+    };
+    const compatibilityReadChecks = {
+      responseUnder2MiB: Object.values(subsonicReads).every((read) =>
+        read.responseBytes.length > 0
+        && read.responseBytes.every((bytes) => isFiniteBelow(bytes, 2 * 1024 * 1024))),
+      maxRssDeltaUnder64MiB: Object.values(subsonicReads).every((read) =>
+        isFiniteBelow(read.maxRssDeltaBytes, 64 * 1024 * 1024)),
+    };
+    const boundedReadCompleted = Object.values(subsonicReads).every((read) =>
+      read.nonVacuous);
     const checks = {
-      fullEndpointReadCompleted: fullReads["full-endpoint"].status === "completed",
-      legacyReadCompleted: adapter.status === "completed",
+      boundedReadCompleted,
+      measuredQueryBudgets: Object.values(measuredQueryChecks).every(Boolean),
+      pageBudgets: Object.values(pageBudgetChecks).every(Boolean),
+      compatibilityReadBudgets: Object.values(compatibilityReadChecks).every(Boolean),
       bulkIndexerCallCount: indexerProbes.bulk.status === "completed"
         && indexerProbes.bulk.callCount === expectedBulkIndexerCalls,
       fallbackIndexerCallCount: indexerProbes.fallback.status === "completed"
@@ -548,7 +712,12 @@ async function main() {
       fallbackIndexerStopsAtBulkFailure: indexerProbes.fallback.status === "completed"
         && indexerProbes.fallback.error === "bulk track-file read failed"
         && indexerProbes.fallback.maxActiveAlbums === 0,
-      pageWarmP95Under750ms: Object.values(pageP95).every((value) => value < 750),
+      artistProjectionPageBounded:
+        artistProjectionPlanDetails.some((detail) => detail.includes("MATERIALIZE artist_page"))
+        && artistProjectionPlanDetails.some((detail) =>
+          /SEARCH album USING (?:COVERING )?INDEX .*artist_id/.test(detail),
+        )
+        && !artistProjectionPlanDetails.some((detail) => detail === "SCAN album"),
     };
     output = {
       benchmark: "aurral-library",
@@ -559,8 +728,25 @@ async function main() {
       options,
       elapsedMs: Number((performance.now() - started).toFixed(3)),
       seed: { ...seed, elapsedMs: seedElapsedMs },
+      subsonicReads,
       pages,
-      fullReads,
+      artistProjectionPlan,
+      budgets: {
+        targets: {
+          warmPageP95Ms: 250,
+          coldPageP95Ms: 750,
+          responseBytes: 2 * 1024 * 1024,
+          requestRssDeltaBytes: 64 * 1024 * 1024,
+        },
+        measuredQueryChecks,
+        pageBudgetChecks,
+        compatibilityReadChecks,
+        deferredIntegrationChecks: [
+          "stableReadProviderCalls",
+          "readStartedJobs",
+          "restartMigrationRepeats",
+        ],
+      },
       indexer: {
         requestedAlbums: options.indexerAlbums,
         expectedBulkCalls: expectedBulkIndexerCalls,
