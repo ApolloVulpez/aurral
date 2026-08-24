@@ -18,7 +18,7 @@ const [
   { flowPlaylistConfig },
   { playlistManager },
   { weeklyFlowWorker },
-  honkerDb,
+  { queueQualityUpgrade },
   { registerJobs },
 ] = await setupIsolatedBackend(
   "approved-import-path",
@@ -28,7 +28,7 @@ const [
   "backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js",
   "backend/services/weeklyFlow/weeklyFlowPlaylistManager.js",
   "backend/services/weeklyFlow/weeklyFlowWorker.js",
-  "backend/services/honkerDb.js",
+  "backend/services/qualityProfileService.js",
   "backend/routes/weeklyFlow/handlers/jobs.js",
 );
 
@@ -156,6 +156,54 @@ test("reports when an upgrade search is already queued for a track", async () =>
   assert.equal(payload.queued, 0);
 });
 
+test("records queued upgrade history if the pipeline removes the live job immediately", async () => {
+  const playlistId = "e6be4cd3-10b0-4744-baa1-7e960a41ca54";
+  flowPlaylistConfig.createSharedPlaylist({
+    id: playlistId,
+    name: "Fast failure",
+    tracks: [{ artistName: "Artist", trackName: "Fast failure track", albumName: "Album" }],
+  });
+  dbOps.updateSettings({
+    ...dbOps.getSettings(),
+    integrations: {
+      slskd: { enabled: true, url: "http://127.0.0.1:1", apiKey: "test-key" },
+    },
+  });
+  const finalPath = path.join(
+    process.env.DOWNLOAD_FOLDER,
+    "aurral-weekly-flow",
+    playlistId,
+    "Artist",
+    "Album",
+    "Fast failure track.mp3",
+  );
+  await fs.mkdir(path.dirname(finalPath), { recursive: true });
+  await fs.writeFile(finalPath, "audio");
+  const jobId = downloadTracker.addJob(
+    { artistName: "Artist", trackName: "Fast failure track", albumName: "Album" },
+    playlistId,
+  );
+  downloadTracker.setDone(jobId, finalPath, "Album");
+  downloadTracker.updateQuality(jobId, { tier: "mp3-128", format: "mp3" });
+
+  const originalEnqueue = downloadTracker.enqueueDownloadPipeline;
+  downloadTracker.enqueueDownloadPipeline = (upgradeJobId) => {
+    downloadTracker.removeJob(upgradeJobId);
+    return true;
+  };
+  try {
+    assert.equal(await queueQualityUpgrade(downloadTracker.getJob(jobId)), "queued");
+    assert.equal(
+      dbOps.getAurralHistory().some(
+        (entry) => entry.metadata?.trackName === "Fast failure track",
+      ),
+      true,
+    );
+  } finally {
+    downloadTracker.enqueueDownloadPipeline = originalEnqueue;
+  }
+});
+
 test("search all stays within the requesting user's playlist access", async () => {
   const ownedPlaylistId = "c0de1f39-226f-4ab8-8f37-09d8adf47b5a";
   const otherPlaylistId = "a2b9ae35-7fb7-474e-a0d4-8ac4bdb8d9e6";
@@ -182,14 +230,46 @@ test("search all stays within the requesting user's playlist access", async () =
   downloadTracker.setFailed(jobId, "No source");
   downloadTracker.setFailed(otherJobId, "No source");
 
+  const ownedPath = path.join(
+    process.env.DOWNLOAD_FOLDER,
+    "aurral-weekly-flow",
+    ownedPlaylistId,
+    "Artist",
+    "Album",
+    "Owned.mp3",
+  );
+  const otherPath = path.join(
+    process.env.DOWNLOAD_FOLDER,
+    "aurral-weekly-flow",
+    otherPlaylistId,
+    "Artist",
+    "Album",
+    "Private.mp3",
+  );
+  await fs.mkdir(path.dirname(ownedPath), { recursive: true });
+  await fs.mkdir(path.dirname(otherPath), { recursive: true });
+  await fs.writeFile(ownedPath, "audio");
+  await fs.writeFile(otherPath, "audio");
+  const ownedUpgradeId = downloadTracker.addJob(
+    { artistName: "Artist", trackName: "Owned", albumName: "Album" },
+    ownedPlaylistId,
+  );
+  const otherUpgradeId = downloadTracker.addJob(
+    { artistName: "Artist", trackName: "Private", albumName: "Album" },
+    otherPlaylistId,
+  );
+  downloadTracker.setDone(ownedUpgradeId, ownedPath, "Album");
+  downloadTracker.setDone(otherUpgradeId, otherPath, "Album");
+  downloadTracker.updateQuality(ownedUpgradeId, { tier: "mp3-128", format: "mp3" });
+  downloadTracker.updateQuality(otherUpgradeId, { tier: "mp3-128", format: "mp3" });
+  dbOps.updateSettings({
+    ...dbOps.getSettings(),
+    integrations: {
+      slskd: { enabled: true, url: "http://127.0.0.1:1", apiKey: "test-key" },
+    },
+  });
+
   const originalStart = weeklyFlowWorker.start;
-  const systemTaskQueue = honkerDb.getSystemTaskQueue();
-  const originalEnqueue = systemTaskQueue.enqueue;
-  const enqueuedTasks = [];
-  systemTaskQueue.enqueue = (payload, options) => {
-    enqueuedTasks.push({ payload, options });
-    return enqueuedTasks.length;
-  };
   weeklyFlowWorker.start = async () => {};
   requestUser = { role: "user", id: 7 };
   try {
@@ -203,21 +283,29 @@ test("search all stays within the requesting user's playlist access", async () =
     const upgradeResponse = await fetch(`${baseUrl}/quality-upgrades`, { method: "POST" });
     const upgradePayload = await upgradeResponse.json();
     assert.equal(upgradeResponse.status, 200, JSON.stringify(upgradePayload));
-    assert.equal(upgradePayload.scheduled, true);
+    assert.equal(upgradePayload.queued, 1);
     assert.equal(upgradePayload.playlistCount, 1);
-    assert.deepEqual(enqueuedTasks, [
-      {
-        payload: {
-          kind: "quality-upgrade-check",
-          force: true,
-          playlistId: ownedPlaylistId,
-          limit: 500,
-        },
-        options: { priority: -10, runAt: null },
-      },
-    ]);
+    const queuedUpgrade = downloadTracker.getAll().find(
+      (job) => job.upgradeForJobId === ownedUpgradeId,
+    );
+    assert.equal(["pending", "downloading"].includes(queuedUpgrade?.status), true);
+    assert.equal(
+      downloadTracker.getAll().some((job) => job.upgradeForJobId === otherUpgradeId),
+      false,
+    );
+    assert.equal(
+      dbOps.getAurralHistory().some((entry) => entry.metadata?.jobId === queuedUpgrade.id),
+      true,
+    );
+
+    const jobsResponse = await fetch(`${baseUrl}/jobs`);
+    const jobsPayload = await jobsResponse.json();
+    assert.match(jobsResponse.headers.get("cache-control") || "", /no-store/);
+    assert.equal(
+      jobsPayload.some((job) => job.upgradeForJobId === ownedUpgradeId),
+      true,
+    );
   } finally {
-    systemTaskQueue.enqueue = originalEnqueue;
     weeklyFlowWorker.start = originalStart;
     requestUser = { role: "admin" };
   }
